@@ -329,7 +329,16 @@ class _MangaChapterPageGalleryState
   late int? _currentIndex = () {
     final saved = _savedPageIndex;
     if (_isDoublePageActiveSync) {
-      return _actualToPageViewIndexSync(saved);
+      // The preload manager is not initialized yet. Use the initial pages
+      // so the restore anchor points at the final spread, rather than zero.
+      final initialPages = widget.chapterUrlModel.uChapDataPreload;
+      return ReaderPageIndexMath(
+        isDoublePageActive: true,
+        singleFirst:
+            settingsRepository.current.doublePageSingleFirstPage ?? false,
+        pageCount: initialPages.length,
+        pages: initialPages,
+      ).actualToPageViewIndex(saved);
     }
     return saved;
   }();
@@ -616,6 +625,9 @@ class _MangaChapterPageGalleryState
             ).actualToPageViewIndex(currentActual)
           : currentActual;
       _currentIndex = targetIndex;
+      if (_initialContinuousJumpPending) {
+        _initialContinuousTargetIndex = targetIndex;
+      }
       _currentPageViewIndex.value = targetIndex;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
@@ -641,6 +653,9 @@ class _MangaChapterPageGalleryState
           pages: pages,
         ).actualToPageViewIndex(currentActual);
         _currentIndex = newPvIndex;
+        if (_initialContinuousJumpPending) {
+          _initialContinuousTargetIndex = newPvIndex;
+        }
         setState(() {});
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
@@ -1053,6 +1068,8 @@ class _MangaChapterPageGalleryState
       animatePageTransitionsStateProvider,
     );
     if (readerMode == null || _currentIndex == null) return;
+    _initialContinuousJumpPending = false;
+    _initialContinuousTargetIndex = null;
 
     if (!forward &&
         _currentIndex == 0 &&
@@ -1663,6 +1680,9 @@ class _MangaChapterPageGalleryState
         ? _actualToPageViewIndex(actualIndex)
         : actualIndex;
     _currentIndex = targetIndex;
+    if (_initialContinuousJumpPending) {
+      _initialContinuousTargetIndex = targetIndex;
+    }
     _currentPageViewIndex.value = targetIndex;
 
     if (value == ReaderMode.vertical || value.isHorizontalPaged) {
@@ -1802,10 +1822,6 @@ class _MangaChapterPageGalleryState
   /// for double page mode.
   int _actualToPageViewIndex(int actualIndex) =>
       _indexMath.actualToPageViewIndex(actualIndex);
-
-  /// Safe version of _actualToPageViewIndex that uses cached reader mode and repository settings.
-  int _actualToPageViewIndexSync(int actualIndex) =>
-      _indexMathSync.actualToPageViewIndex(actualIndex);
 
   /// Returns the actual index in the [pages] array for the currently viewed page.
   /// Unlike [_currentPageDisplayIndex.value] (which is local to the active chapter, e.g. 0..N),
