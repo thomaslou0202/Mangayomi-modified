@@ -86,6 +86,7 @@ class ImageViewWebtoon extends ConsumerStatefulWidget {
   final Axis scrollDirection;
   final double minCacheExtent;
   final int initialScrollIndex;
+  final double initialScrollAlignment;
   final ScrollPhysics physics;
   final Function(UChapDataPreload data) onLongPressData;
   final Function(int index, bool failed) onFailedToLoadImage;
@@ -108,6 +109,7 @@ class ImageViewWebtoon extends ConsumerStatefulWidget {
     required this.scrollDirection,
     required this.minCacheExtent,
     required this.initialScrollIndex,
+    this.initialScrollAlignment = 0,
     required this.physics,
     required this.onLongPressData,
     required this.onFailedToLoadImage,
@@ -159,7 +161,7 @@ class _ImageViewWebtoonState extends ConsumerState<ImageViewWebtoon>
   @override
   void initState() {
     super.initState();
-    if (widget.initialScrollIndex > 0) {
+    if (widget.initialScrollIndex > 0 || widget.initialScrollAlignment > 0) {
       void jump([int attempt = 0]) {
         if (!mounted) return;
         if (widget.listController.isAttached &&
@@ -169,7 +171,7 @@ class _ImageViewWebtoonState extends ConsumerState<ImageViewWebtoon>
           widget.listController.jumpToItem(
             index: widget.initialScrollIndex,
             scrollController: widget.scrollController,
-            alignment: 0.0,
+            alignment: widget.initialScrollAlignment,
           );
           if (attempt < 5) {
             final range = widget.listController.visibleRange;

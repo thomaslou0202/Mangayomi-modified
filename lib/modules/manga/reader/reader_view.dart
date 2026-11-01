@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:math';
 
 import 'package:mangayomi/repositories/settings_repository.dart';
 import 'package:photo_view/photo_view.dart';
@@ -41,6 +40,7 @@ import 'package:mangayomi/services/get_chapter_pages.dart';
 import 'package:mangayomi/modules/manga/reader/u_chap_data_preload.dart';
 import 'package:mangayomi/modules/manga/reader/utils/double_page_zoom_pan.dart';
 import 'package:mangayomi/modules/manga/reader/utils/reader_page_index_math.dart';
+import 'package:mangayomi/modules/manga/reader/utils/reader_start_position.dart';
 import 'package:mangayomi/modules/widgets/custom_extended_image_provider.dart';
 import 'package:mangayomi/modules/manga/reader/providers/reader_controller_provider.dart';
 import 'package:mangayomi/modules/manga/reader/providers/manga_reader_provider.dart';
@@ -101,6 +101,9 @@ class MangaReaderView extends ConsumerWidget {
         return MangaChapterPageGallery(
           chapter: chapter,
           chapterUrlModel: model,
+          fromEnd:
+              GoRouterState.of(context).uri.queryParameters['fromEnd'] ==
+              'true',
         );
       },
     );
@@ -146,8 +149,10 @@ class MangaChapterPageGallery extends ConsumerStatefulWidget {
     super.key,
     required this.chapter,
     required this.chapterUrlModel,
+    this.fromEnd = false,
   });
   final GetChapterPagesModel chapterUrlModel;
+  final bool fromEnd;
 
   final Chapter chapter;
 
@@ -315,9 +320,10 @@ class _MangaChapterPageGalleryState
 
   /// The saved position within the chapter. It can point past the end when
   /// the source now serves fewer pages than when the chapter was last read.
-  late final int _savedPageIndex = min(
-    _readerController.getPageIndex(),
-    max(0, widget.chapterUrlModel.uChapDataPreload.length - 1),
+  late final int _savedPageIndex = readerStartPage(
+    savedIndex: _readerController.getPageIndex(),
+    pageCount: widget.chapterUrlModel.uChapDataPreload.length,
+    fromEnd: widget.fromEnd,
   );
 
   late int? _currentIndex = () {
@@ -359,7 +365,7 @@ class _MangaChapterPageGalleryState
     _readingStopwatch.start();
 
     final saved = _savedPageIndex;
-    if (saved > 0 && _cachedReaderMode.isContinuous) {
+    if ((saved > 0 || widget.fromEnd) && _cachedReaderMode.isContinuous) {
       _initialContinuousJumpPending = true;
       _initialContinuousTargetIndex = _currentIndex;
     }
@@ -538,7 +544,7 @@ class _MangaChapterPageGalleryState
   ///
   /// If the reader is already at the first or last chapter (depending on
   /// the direction), the method returns without navigating.
-  void _goToChapter(bool next) {
+  void _goToChapter(bool next, {bool fromEnd = false}) {
     if (next && !_readerController.hasNextChapter) return;
     if (!next && !_readerController.hasPreviousChapter) return;
     _isNavigatingToChapter = true;
@@ -548,10 +554,29 @@ class _MangaChapterPageGalleryState
         chapter: next
             ? _readerController.getNextChapter()
             : _readerController.getPrevChapter(),
+        fromEnd: fromEnd,
       );
     } catch (_) {
       // If the replacement fails, dispose() never runs to reset this flag, so reset it here instead.
       _isNavigatingToChapter = false;
+      rethrow;
+    }
+  }
+
+  bool _openingPrevious = false;
+
+  void _openPreviousTail() {
+    if (!mounted ||
+        _openingPrevious ||
+        !_readerController.hasPreviousChapter ||
+        _isCurrentPageZoomed) {
+      return;
+    }
+    _openingPrevious = true;
+    try {
+      _goToChapter(false, fromEnd: true);
+    } catch (_) {
+      _openingPrevious = false;
       rethrow;
     }
   }
@@ -675,6 +700,12 @@ class _MangaChapterPageGalleryState
             child: Stack(
               children: [
                 ReaderPageContent(
+                  onLeadingBoundary:
+                      !_isCurrentPageZoomed &&
+                          _readerController.hasPreviousChapter
+                      ? _openPreviousTail
+                      : null,
+                  initialScrollAlignment: widget.fromEnd ? 1.0 : 0.0,
                   pages: pages,
                   chapter: widget.chapter,
                   readerMode: readerMode,
@@ -1023,6 +1054,18 @@ class _MangaChapterPageGalleryState
     );
     if (readerMode == null || _currentIndex == null) return;
 
+    if (!forward &&
+        _currentIndex == 0 &&
+        !_isCurrentPageZoomed &&
+        (!readerMode.isContinuous ||
+            (_continuousScrollController.hasClients &&
+                _continuousScrollController.offset <=
+                    _continuousScrollController.position.minScrollExtent +
+                        0.5))) {
+      _openPreviousTail();
+      return;
+    }
+
     if (readerMode == ReaderMode.webtoon) {
       final isHorizontal = readerMode.isHorizontalContinuous;
       final viewportSize = MediaQuery.sizeOf(context);
@@ -1184,7 +1227,7 @@ class _MangaChapterPageGalleryState
       _listController.jumpToItem(
         index: targetIndex,
         scrollController: _continuousScrollController,
-        alignment: 0.0,
+        alignment: widget.fromEnd ? 1.0 : 0.0,
       );
     });
   }
@@ -1284,7 +1327,7 @@ class _MangaChapterPageGalleryState
       }
     }
     ref.read(_currentReaderMode.notifier).state = readerMode;
-    _setReaderMode(readerMode, ref, forceIndex: _currentIndex);
+    _setReaderMode(readerMode, ref, forceIndex: _savedPageIndex);
 
     if (!readerMode.isVerticalContinuous) {
       _autoScroll.value = false;
@@ -1570,7 +1613,6 @@ class _MangaChapterPageGalleryState
     _readerController.autoScrollValues().$2,
   );
 
-
   void _autoPagescroll() {
     onAutoScrollChanged();
   }
@@ -1612,6 +1654,7 @@ class _MangaChapterPageGalleryState
     });
     // Wait for the next frame so the scroll view rebuilds
     await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
 
     final isDoubleInNewMode =
         _effectivePageMode == PageMode.doublePage &&
@@ -1632,7 +1675,9 @@ class _MangaChapterPageGalleryState
         _listController.jumpToItem(
           index: targetIndex,
           scrollController: _continuousScrollController,
-          alignment: 0.0,
+          alignment: widget.fromEnd && _initialContinuousJumpPending
+              ? 1.0
+              : 0.0,
         );
       }
     }

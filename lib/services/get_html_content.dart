@@ -8,6 +8,7 @@ import 'package:mangayomi/modules/library/providers/file_scanner.dart';
 import 'package:mangayomi/modules/more/settings/browse/providers/browse_state_provider.dart';
 import 'package:mangayomi/providers/storage_provider.dart';
 import 'package:mangayomi/utils/utils.dart';
+import 'package:mangayomi/modules/novel/utils/novel_content.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:mangayomi/utils/log/logger.dart';
 part 'get_html_content.g.dart';
@@ -96,10 +97,7 @@ Future<(String, EpubNovel?)> getHtmlContent(
         // cleanHtmlContent renders a blank page, so strip the outer quotes and
         // hand it to _buildHtml directly.
         final raw = await localFile.readAsString();
-        final stripped =
-            raw.length >= 2 && raw.startsWith('"') && raw.endsWith('"')
-            ? raw.substring(1, raw.length - 1)
-            : raw;
+        final stripped = decodeNovelHtmlResponse(raw);
         result = (_buildHtml(stripped), null);
       } else {
         // Not downloaded: fetch from the source (needs network).
@@ -109,6 +107,7 @@ Future<(String, EpubNovel?)> getHtmlContent(
           chapter.manga.value!.sourceId,
           installedOnly: true,
         );
+        if (!ref.mounted) return ('', null);
         final proxyServer = ref.read(androidProxyServerStateProvider);
         final html = await withExtensionService(
           source!,
@@ -118,16 +117,20 @@ Future<(String, EpubNovel?)> getHtmlContent(
             chapter.url!,
           ),
         );
-        final stripped =
-            html.length >= 2 && html.startsWith('"') && html.endsWith('"')
-            ? html.substring(1, html.length - 1)
-            : html;
+        final stripped = decodeNovelHtmlResponse(html);
         result = (_buildHtml(stripped), null);
       }
     }
 
     keepAlive.close();
-    return result;
+    return (
+      removeNovelBookTitle(
+        result.$1,
+        bookTitle: chapter.manga.value?.name ?? '',
+        chapterTitle: chapter.name ?? '',
+      ),
+      result.$2,
+    );
   } catch (e) {
     keepAlive.close();
     rethrow;

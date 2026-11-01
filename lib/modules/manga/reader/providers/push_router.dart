@@ -31,10 +31,14 @@ Future<void> pushMangaReaderView({
 void pushReplacementMangaReaderView({
   required BuildContext context,
   required Chapter chapter,
+  bool fromEnd = false,
 }) {
   switch (chapter.manga.value!.itemType) {
     case ItemType.manga:
-      context.pushReplacement('/mangaReaderView', extra: chapter.id!);
+      context.pushReplacement(
+        fromEnd ? '/mangaReaderView?fromEnd=true' : '/mangaReaderView',
+        extra: chapter.id!,
+      );
       break;
     case ItemType.anime:
       context.pushReplacement('/animePlayerView', extra: chapter.id!);

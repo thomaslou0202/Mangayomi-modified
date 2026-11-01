@@ -61,7 +61,7 @@ class NovelReaderController extends _$NovelReaderController
     final isRead = (newOffset / (maxOffset != 0 ? maxOffset : 1)) >= 0.9;
     if (isRead || save) {
       final ch = chapter;
-      ch.isRead = isRead;
+      ch.isRead = (ch.isRead ?? false) || isRead;
       ch.lastPageRead = (maxOffset != 0 ? newOffset / maxOffset : 0).toString();
       chapterRepository.save(ch);
     }

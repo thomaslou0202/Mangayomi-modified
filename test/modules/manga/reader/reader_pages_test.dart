@@ -1,5 +1,7 @@
 import 'dart:ui';
 
+import 'package:mangayomi/modules/manga/reader/utils/reader_start_position.dart';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mangayomi/models/chapter.dart';
 import 'package:mangayomi/modules/manga/reader/managers/chapter_preload_manager.dart';
@@ -45,6 +47,29 @@ ReaderPageIndexMath doublePage(List<UChapDataPreload> pages) =>
     );
 
 void main() {
+  test(
+    'backward entry selects the final spread in both double-page layouts',
+    () {
+      for (final count in [1, 2, 3, 54, 55]) {
+        for (final singleFirst in [false, true]) {
+          final pages = chapterPages(ch1, count);
+          final math = ReaderPageIndexMath(
+            isDoublePageActive: true,
+            singleFirst: singleFirst,
+            pageCount: count,
+            pages: pages,
+          );
+          final start = readerStartPage(
+            pageCount: count,
+            savedIndex: 0,
+            fromEnd: true,
+          );
+          final spread = math.spreads[math.actualToPageViewIndex(start)];
+          expect([spread.firstIndex, spread.secondIndex], contains(count - 1));
+        }
+      }
+    },
+  );
   group('page counter in double-page mode', () {
     test('a page of the next chapter is labelled from its own spread', () {
       // Chapter 1 has 5 pages, then the transition, then chapter 2. Chapter

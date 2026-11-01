@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import 'package:mangayomi/modules/manga/reader/widgets/reader_leading_boundary.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mangayomi/models/chapter.dart';
 import 'package:mangayomi/models/settings.dart';
@@ -27,6 +29,8 @@ import 'package:super_sliver_list/super_sliver_list.dart';
 /// also owns all the mutable state this widget only reads or reports back
 /// through callbacks.
 class ReaderPageContent extends ConsumerWidget {
+  final VoidCallback? onLeadingBoundary;
+  final double initialScrollAlignment;
   final List<UChapDataPreload> pages;
   final Chapter chapter;
   final ReaderMode readerMode;
@@ -77,6 +81,8 @@ class ReaderPageContent extends ConsumerWidget {
 
   const ReaderPageContent({
     super.key,
+    this.onLeadingBoundary,
+    this.initialScrollAlignment = 0,
     required this.pages,
     required this.chapter,
     required this.readerMode,
@@ -103,7 +109,12 @@ class ReaderPageContent extends ConsumerWidget {
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context, WidgetRef ref) => ReaderLeadingBoundary(
+    onPrevious: onLeadingBoundary,
+    child: _buildContent(context, ref),
+  );
+
+  Widget _buildContent(BuildContext context, WidgetRef ref) {
     final bool isHorizontalContinuous = readerMode.isHorizontalContinuous;
 
     if (readerMode.isContinuous) {
@@ -122,6 +133,7 @@ class ReaderPageContent extends ConsumerWidget {
             ? (pagePreloadAmount.clamp(1, 3) * 1.5) * context.width(1)
             : (pagePreloadAmount.clamp(1, 3) * 1.5) * context.height(1),
         initialScrollIndex: initialScrollIndex,
+        initialScrollAlignment: initialScrollAlignment,
         physics: const ClampingScrollPhysics(),
         onLongPressData: (data) => ImageActionsDialog.show(
           context: context,
