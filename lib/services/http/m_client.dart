@@ -1,3 +1,7 @@
+import 'dart:ui' show Size;
+
+import 'package:mangayomi/services/http/webview_request_profile.dart';
+
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -717,7 +721,12 @@ Future<void> _evaluateJavascriptViaWebview(HttpRequest request) async {
     String response = "";
     flutter_inappwebview.HeadlessInAppWebView? headlessWebView;
     try {
+      final profile = WebviewRequestProfile(headers);
       headlessWebView = flutter_inappwebview.HeadlessInAppWebView(
+        initialSize: Size(profile.width, profile.height),
+        initialSettings: flutter_inappwebview.InAppWebViewSettings(
+          userAgent: profile.userAgent,
+        ),
         webViewEnvironment: webViewEnvironment,
         onWebViewCreated: (controller) {
           controller.addJavaScriptHandler(
