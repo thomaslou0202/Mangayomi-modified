@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:shiori/shiori.dart';
 
 class NovelChapterText {
   const NovelChapterText({required this.id, required this.html});
@@ -274,11 +275,21 @@ class ContinuousNovelReaderState extends State<ContinuousNovelReader> {
                           if (index > 0)
                             Padding(
                               key: ValueKey('chapter-separator-$id'),
-                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              padding: const EdgeInsets.symmetric(
+                                vertical: ShioriSpace.s16,
+                              ),
                               child: Center(
                                 child: SizedBox(
                                   width: 48,
-                                  child: Divider(thickness: 3, height: 3),
+                                  height: 3,
+                                  child: DecoratedBox(
+                                    decoration: BoxDecoration(
+                                      color: context.shiori.color.ink3,
+                                      borderRadius: BorderRadius.circular(
+                                        ShioriShape.pill,
+                                      ),
+                                    ),
+                                  ),
                                 ),
                               ),
                             ),
@@ -297,10 +308,17 @@ class ContinuousNovelReaderState extends State<ContinuousNovelReader> {
                                     ? Column(
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
-                                          const Icon(Icons.error_outline),
-                                          TextButton.icon(
-                                            icon: const Icon(Icons.refresh),
-                                            label: Text(widget.retryLabel),
+                                          Icon(
+                                            Symbols.error_outline_rounded,
+                                            color: context
+                                                .shiori
+                                                .color
+                                                .error
+                                                .foreground,
+                                          ),
+                                          ShioriButton.quiet(
+                                            icon: Symbols.refresh_rounded,
+                                            label: widget.retryLabel,
                                             onPressed: () => setState(() {
                                               _cache.remove(id);
                                               _ready.remove(id);
@@ -308,7 +326,7 @@ class ContinuousNovelReaderState extends State<ContinuousNovelReader> {
                                           ),
                                         ],
                                       )
-                                    : const CircularProgressIndicator(),
+                                    : const ShioriLoading(),
                               ),
                             ),
                         ],

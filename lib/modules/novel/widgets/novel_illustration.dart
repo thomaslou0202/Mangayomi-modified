@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:shiori/shiori.dart';
 
 /// An inline illustration with bounded height in paged reading modes.
 /// The caller supplies the provider so EPUB and online chapters share layout.
@@ -37,7 +38,7 @@ class _NovelIllustrationState extends State<NovelIllustration> {
   Widget build(BuildContext context) {
     final height = widget.maxHeight ?? double.infinity;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      padding: const EdgeInsets.symmetric(vertical: ShioriSpace.s8),
       child: ConstrainedBox(
         constraints: BoxConstraints(maxHeight: height),
         child: Image(
@@ -50,19 +51,22 @@ class _NovelIllustrationState extends State<NovelIllustration> {
             if (frame != null || wasSynchronouslyLoaded) return child;
             return SizedBox(
               height: math.min(160, height),
-              child: const Center(child: CircularProgressIndicator()),
+              child: const Center(child: ShioriLoading.inline()),
             );
           },
           errorBuilder: (context, error, stackTrace) => SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.broken_image_outlined),
+                Icon(
+                  Symbols.broken_image_rounded,
+                  color: context.shiori.color.error.foreground,
+                ),
                 Text(widget.errorLabel, textAlign: TextAlign.center),
-                TextButton.icon(
+                ShioriButton.quiet(
                   onPressed: _retry,
-                  icon: const Icon(Icons.refresh),
-                  label: Text(widget.retryLabel),
+                  icon: Symbols.refresh_rounded,
+                  label: widget.retryLabel,
                 ),
               ],
             ),

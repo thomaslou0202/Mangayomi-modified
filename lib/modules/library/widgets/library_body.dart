@@ -1,5 +1,3 @@
-import 'package:mangayomi/modules/widgets/progress_center.dart';
-import 'package:mangayomi/modules/widgets/error_text.dart';
 import 'package:mangayomi/modules/library/providers/library_summary_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:mangayomi/modules/browse/providers/browse_initial_tab_provider.dart';
@@ -75,12 +73,26 @@ class LibraryBody extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = l10nLocalizations(context)!;
+    Widget loading() => displayType == DisplayType.list
+        ? ListView(
+            physics: const NeverScrollableScrollPhysics(),
+            children: [for (var i = 0; i < 8; i++) const ShioriSkeletonRow()],
+          )
+        : CoverGridSkeleton(
+            gridSize: ref.watch(
+              libraryGridSizeStateProvider(itemType: itemType),
+            ),
+            childAspectRatio: displayType == DisplayType.comfortableGrid
+                ? 0.642
+                : 0.69,
+          );
+
     final summaryState = ref.watch(librarySummaryProvider);
     final summaries = summaryState.asData?.value;
     if (summaries == null) {
       return summaryState.hasError
-          ? ErrorText(summaryState.error!)
-          : const ProgressCenter();
+          ? ErrorState(detail: summaryState.error.toString())
+          : loading();
     }
     final sortType = ref
         .watch(
@@ -203,19 +215,7 @@ class LibraryBody extends ConsumerWidget {
         );
       },
       error: (error, _) => ErrorState(detail: error.toString()),
-      loading: () => displayType == DisplayType.list
-          ? ListView(
-              physics: const NeverScrollableScrollPhysics(),
-              children: [for (var i = 0; i < 8; i++) const ShioriSkeletonRow()],
-            )
-          : CoverGridSkeleton(
-              gridSize: ref.watch(
-                libraryGridSizeStateProvider(itemType: itemType),
-              ),
-              childAspectRatio: displayType == DisplayType.comfortableGrid
-                  ? 0.642
-                  : 0.69,
-            ),
+      loading: loading,
     );
   }
 }
