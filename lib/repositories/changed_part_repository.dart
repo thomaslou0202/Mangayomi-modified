@@ -167,44 +167,94 @@ class ChangedPartRepository {
   }
 
   Future<void> backfillMissingClientIds(int Function() generateId) async {
-    final categories = isar.categorys.filter().clientIdIsNull().findAllSync();
-    final mangas = isar.mangas.filter().clientIdIsNull().findAllSync();
-    final chapters = isar.chapters.filter().clientIdIsNull().findAllSync();
-    final tracks = isar.tracks.filter().clientIdIsNull().findAllSync();
-    final histories = isar.historys.filter().clientIdIsNull().findAllSync();
-    final updates = isar.updates.filter().clientIdIsNull().findAllSync();
-
-    if (categories.isEmpty &&
-        mangas.isEmpty &&
-        chapters.isEmpty &&
-        tracks.isEmpty &&
-        histories.isEmpty &&
-        updates.isEmpty) {
-      return;
+    Future<void> fill<T>(
+      IsarCollection<T> collection,
+      List<int> ids,
+      int? Function(T) clientIdOf,
+      void Function(T, int, int) assign,
+    ) async {
+      for (var start = 0; start < ids.length; start += 100) {
+        await dbWriteQueue.run(() {
+          isar.writeTxnSync(() {
+            final updatedAt = DateTime.now().millisecondsSinceEpoch;
+            for (final id in ids.skip(start).take(100)) {
+              // A reader or another sync may have written this row while queued.
+              final current = collection.getSync(id);
+              if (current == null || clientIdOf(current) != null) continue;
+              assign(current, generateId(), updatedAt);
+              collection.putSync(current);
+            }
+          });
+        });
+        await Future<void>.delayed(Duration.zero);
+      }
     }
 
-    await dbWriteQueue.run(() {
-      isar.writeTxnSync(() {
-        for (final row in categories) {
-          isar.categorys.putSync(row..clientId = generateId());
-        }
-        for (final row in mangas) {
-          isar.mangas.putSync(row..clientId = generateId());
-        }
-        for (final row in chapters) {
-          isar.chapters.putSync(row..clientId = generateId());
-        }
-        for (final row in tracks) {
-          isar.tracks.putSync(row..clientId = generateId());
-        }
-        for (final row in histories) {
-          isar.historys.putSync(row..clientId = generateId());
-        }
-        for (final row in updates) {
-          isar.updates.putSync(row..clientId = generateId());
-        }
-      });
-    });
+    await fill(
+      isar.categorys,
+      isar.categorys.where().clientIdIsNull().idProperty().findAllSync(),
+      (row) => row.clientId,
+      (row, id, updatedAt) => row
+        ..clientId = id
+        ..updatedAt = (row.updatedAt ?? 0) > updatedAt
+            ? row.updatedAt
+            : updatedAt,
+    );
+
+    await fill(
+      isar.mangas,
+      isar.mangas.where().clientIdIsNull().idProperty().findAllSync(),
+      (row) => row.clientId,
+      (row, id, updatedAt) => row
+        ..clientId = id
+        ..updatedAt = (row.updatedAt ?? 0) > updatedAt
+            ? row.updatedAt
+            : updatedAt,
+    );
+
+    await fill(
+      isar.chapters,
+      isar.chapters.where().clientIdIsNull().idProperty().findAllSync(),
+      (row) => row.clientId,
+      (row, id, updatedAt) => row
+        ..clientId = id
+        ..updatedAt = (row.updatedAt ?? 0) > updatedAt
+            ? row.updatedAt
+            : updatedAt,
+    );
+
+    await fill(
+      isar.tracks,
+      isar.tracks.where().clientIdIsNull().idProperty().findAllSync(),
+      (row) => row.clientId,
+      (row, id, updatedAt) => row
+        ..clientId = id
+        ..updatedAt = (row.updatedAt ?? 0) > updatedAt
+            ? row.updatedAt
+            : updatedAt,
+    );
+
+    await fill(
+      isar.historys,
+      isar.historys.where().clientIdIsNull().idProperty().findAllSync(),
+      (row) => row.clientId,
+      (row, id, updatedAt) => row
+        ..clientId = id
+        ..updatedAt = (row.updatedAt ?? 0) > updatedAt
+            ? row.updatedAt
+            : updatedAt,
+    );
+
+    await fill(
+      isar.updates,
+      isar.updates.where().clientIdIsNull().idProperty().findAllSync(),
+      (row) => row.clientId,
+      (row, id, updatedAt) => row
+        ..clientId = id
+        ..updatedAt = (row.updatedAt ?? 0) > updatedAt
+            ? row.updatedAt
+            : updatedAt,
+    );
   }
 }
 

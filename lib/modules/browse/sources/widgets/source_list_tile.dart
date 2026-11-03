@@ -252,7 +252,7 @@ class SourceMeta extends StatelessWidget {
       spacing: ShioriSpace.s4,
       children: [
         Text(
-          languageName(context, source.lang!.toLowerCase()),
+          languageName(context, (source.lang ?? '').toLowerCase()),
           style: tokens.caption,
         ),
         if (source.isNsfw ?? false)

@@ -184,9 +184,7 @@ void main() {
         () => app.isar.writeTxn(() => app.isar.sources.put(source)),
       );
       await show(tester, ItemType.manga, [source]);
-      await tester.tap(
-        find.widgetWithIcon(IconButton, Icons.push_pin_outlined),
-      );
+      await tester.tap(find.byTooltip('Pin'));
       await tester.pump();
       expect(app.isar.sources.getSync(42)!.isPinned, true);
       expect(tester.takeException(), isNull);
