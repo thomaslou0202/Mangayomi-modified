@@ -23,17 +23,19 @@ Future<dynamic> updateMangaDetail(
   required bool isInit,
   bool showToast = true,
 }) async {
+  // Detail callers can read the future without subscribing to this provider.
+  final operation = ref.keepAlive();
   try {
-    final initialManga = mangaRepository.findById(mangaId!);
+    if (mangaId == null) return;
+    final initialManga = mangaRepository.findById(mangaId);
     if (initialManga == null) return;
     var manga = initialManga;
 
-    manga.chapters.loadSync();
-
     if ((manga.isLocalArchive ?? false) ||
-        (manga.chapters.isNotEmpty && isInit)) {
+        (isInit && await chapterRepository.countByMangaIdAsync(mangaId) > 0)) {
       return;
     }
+    if (!ref.mounted) return;
     final source = getSource(
       manga.lang!,
       manga.source!,
@@ -47,9 +49,11 @@ Future<dynamic> updateMangaDetail(
     final requestedLang = manga.lang;
     final requestedItemType = manga.itemType;
 
-    final getManga = await ref.read(
+    final getManga = await ref.watch(
       getDetailProvider(url: manga.link!, source: source).future,
     );
+
+    if (!ref.mounted) return;
 
     final genre =
         getManga.genre
@@ -89,10 +93,12 @@ Future<dynamic> updateMangaDetail(
     final metadata = manga;
     final aliases = <int, Chapter>{};
     await mangaRepository.writeTransactionAsync(() async {
+      if (!ref.mounted) return;
       // Reading, another refresh, or source migration may have changed the
       // stored objects while the network request was in flight.
       final current = await mangaRepository.findByIdAsync(mangaId);
-      if (current == null ||
+      if (!ref.mounted ||
+          current == null ||
           current.link != requestedLink ||
           current.sourceId != requestedSourceId ||
           current.source != requestedSource ||
@@ -329,10 +335,13 @@ Future<dynamic> updateMangaDetail(
       }
     }, afterCommit: () => chapterRepository.publishAliases(aliases));
   } catch (e, s) {
+    if (!ref.mounted) return;
     if (showToast) {
       toastError(e, stack: s, source: 'updateMangaDetail');
     } else {
       rethrow;
     }
+  } finally {
+    operation.close();
   }
 }

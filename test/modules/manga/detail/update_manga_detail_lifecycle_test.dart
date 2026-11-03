@@ -10,9 +10,9 @@ import 'package:mangayomi/main.dart' as app;
 import 'package:mangayomi/models/chapter.dart';
 import 'package:mangayomi/models/manga.dart';
 import 'package:mangayomi/models/source.dart';
-import 'package:mangayomi/models/update.dart';
 import 'package:mangayomi/modules/manga/detail/providers/update_manga_detail_providers.dart';
 import 'package:mangayomi/services/get_detail.dart';
+import 'package:mangayomi/providers/storage_provider.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -36,7 +36,7 @@ void main() {
   setUp(() async {
     directory = await Directory.systemTemp.createTemp('detail_lifecycle_');
     app.isar = await Isar.open(
-      [MangaSchema, ChapterSchema, SourceSchema, UpdateSchema],
+      StorageProvider.databaseSchemas,
       directory: directory.path,
       name: 'detail_${directory.path.hashCode}',
     );
