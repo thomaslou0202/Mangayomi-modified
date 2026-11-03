@@ -56,3 +56,6 @@ libisar.dylib
 libisar.so
 isar.dll
 libisar.dll
+
+# Release verification dependencies
+/node_modules/
