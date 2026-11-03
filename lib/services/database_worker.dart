@@ -148,7 +148,7 @@ Future<void> _databaseEntry(List<Object?> arguments) async {
           requests.close();
           return;
         case 'backfill':
-          await backfillClientIdsInWorker();
+          await backfillMissingClientIds();
           result = null;
         default:
           throw ArgumentError('Unknown database operation');

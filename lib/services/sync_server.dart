@@ -1,5 +1,4 @@
 import 'package:mangayomi/services/database_worker.dart';
-import 'package:mangayomi/services/sync/sync_background_service.dart';
 
 // Riverpod-facing orchestration for the sync-server's `/api/sync/v1`
 // protocol. The wire transport lives in SyncApiClient, applying a pulled
@@ -9,32 +8,34 @@ import 'package:mangayomi/services/sync/sync_background_service.dart';
 // (toasts, progress, invalidated providers).
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 
 import 'package:crypto/crypto.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_web_auth_2/flutter_web_auth_2.dart';
+import 'package:mangayomi/services/external_browser.dart';
+import 'package:mangayomi/services/background_work/background_work.dart';
 import 'package:mangayomi/eval/model/m_bridge.dart';
 import 'package:mangayomi/models/manga.dart';
-import 'package:mangayomi/modules/more/settings/appearance/providers/blend_level_state_provider.dart';
-import 'package:mangayomi/modules/more/settings/appearance/providers/flex_scheme_color_state_provider.dart';
-import 'package:mangayomi/modules/more/settings/appearance/providers/floating_navigation_bar_state_provider.dart';
-import 'package:mangayomi/modules/more/settings/appearance/providers/pure_black_dark_mode_state_provider.dart';
-import 'package:mangayomi/modules/more/settings/appearance/providers/theme_mode_state_provider.dart';
-import 'package:mangayomi/modules/more/settings/browse/providers/browse_state_provider.dart';
-import 'package:mangayomi/modules/more/settings/security/providers/security_state_provider.dart';
-import 'package:mangayomi/modules/more/settings/sync/providers/sync_progress_provider.dart';
-import 'package:mangayomi/modules/more/settings/sync/providers/sync_providers.dart';
+import 'package:mangayomi/providers/blend_level_state_provider.dart';
+import 'package:mangayomi/providers/flex_scheme_color_state_provider.dart';
+import 'package:mangayomi/providers/floating_navigation_bar_state_provider.dart';
+import 'package:mangayomi/providers/show_updates_badge_state_provider.dart';
+import 'package:mangayomi/providers/pure_black_dark_mode_state_provider.dart';
+import 'package:mangayomi/providers/theme_mode_state_provider.dart';
+import 'package:mangayomi/providers/browse_state_provider.dart';
+import 'package:mangayomi/providers/security_state_provider.dart';
+import 'package:mangayomi/providers/sync_progress_provider.dart';
+import 'package:mangayomi/providers/sync_providers.dart';
 import 'package:mangayomi/providers/l10n_providers.dart';
 import 'package:mangayomi/services/http/m_client.dart';
 import 'package:mangayomi/services/sync/sync_api_client.dart';
 import 'package:mangayomi/services/sync/sync_change_collector.dart';
 import 'package:mangayomi/services/sync/sync_checkpoint.dart';
-import 'package:mangayomi/utils/client_id.dart';
-import 'package:mangayomi/utils/platform_utils.dart';
 
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:mangayomi/l10n/generated/app_localizations.dart';
+import 'package:mangayomi/providers/tint_surfaces_state_provider.dart';
+import 'package:mangayomi/utils/error_toast.dart';
 part 'sync_server.g.dart';
 
 /// Matches the server's SYNC.maxRowsPerEntity. A changed-row batch larger
@@ -46,6 +47,23 @@ const _maxRowsPerEntity = 5000;
 // a redirect_uri are checked server-side (see isAllowedRedirectUri in the
 // sync-server repo), not the port, so this can be anything not already in use.
 const _desktopOAuthCallbackPort = 48765;
+
+/// Where the sync server sends the browser back after login: a loopback
+/// server catches it on Windows and Linux, the app's own scheme everywhere
+/// else. flutter_web_auth_2 takes a loopback address only on Windows and
+/// Linux; macOS, counted as a desktop here, rejected it as a scheme (#1062).
+/// The trackers already split it this way.
+({String redirectUri, String callbackUrlScheme}) syncOAuthCallback({
+  required bool loopback,
+}) => loopback
+    ? (
+        redirectUri: 'http://localhost:$_desktopOAuthCallbackPort/callback',
+        callbackUrlScheme: 'http://localhost:$_desktopOAuthCallbackPort',
+      )
+    : (
+        redirectUri: 'mangayomi://oauth-callback',
+        callbackUrlScheme: 'mangayomi',
+      );
 
 @riverpod
 class SyncServer extends _$SyncServer {
@@ -62,8 +80,8 @@ class SyncServer extends _$SyncServer {
 
   // ------------------------------------------------------------------
   // Login. OAuth (PKCE) only - the server's own authorize/token endpoints,
-  // opened in the system browser. There is no password form: this app talks
-  // to exactly one server it's paired with, not a third-party OAuth
+  // opened in the browser the user chose. There is no password form: this app
+  // talks to exactly one server it's paired with, not a third-party OAuth
   // provider, so the browser round trip is purely local - it's whichever
   // session is already logged into that server's website.
   // ------------------------------------------------------------------
@@ -74,12 +92,9 @@ class SyncServer extends _$SyncServer {
       final verifier = _generatePkceVerifier();
       final challenge = _codeChallengeFromVerifier(verifier);
       final state = _generatePkceVerifier();
-      final redirectUri = isDesktop
-          ? 'http://localhost:$_desktopOAuthCallbackPort/callback'
-          : 'mangayomi://oauth-callback';
-      final callbackUrlScheme = isDesktop
-          ? 'http://localhost:$_desktopOAuthCallbackPort'
-          : 'mangayomi';
+      final (:redirectUri, :callbackUrlScheme) = syncOAuthCallback(
+        loopback: Platform.isWindows || Platform.isLinux,
+      );
 
       final authorizeUrl = Uri.parse('$server/api/oauth/authorize').replace(
         queryParameters: {
@@ -90,11 +105,12 @@ class SyncServer extends _$SyncServer {
         },
       );
 
-      final resultUrl = await FlutterWebAuth2.authenticate(
-        url: authorizeUrl.toString(),
+      final resultUri = await ExternalBrowser.openOAuth(
+        authorizeUrl.toString(),
+        port: _desktopOAuthCallbackPort,
         callbackUrlScheme: callbackUrlScheme,
       );
-      final resultParams = Uri.parse(resultUrl).queryParameters;
+      final resultParams = resultUri?.queryParameters ?? const {};
       final code = resultParams['code'];
       // Confirms this callback answers the authorize call this same login()
       // just made, not a stray/replayed one.
@@ -126,7 +142,8 @@ class SyncServer extends _$SyncServer {
           .login(server, username, accessToken);
       botToast(l10n.sync_logged);
       return (true, "");
-    } catch (e) {
+    } catch (e, stackTrace) {
+      recordError(e, stack: stackTrace, source: 'sync_server');
       return (false, e.toString());
     }
   }
@@ -193,8 +210,8 @@ class SyncServer extends _$SyncServer {
     _tokenAtStart = _getAccessToken();
     final idle = _syncIdle = Completer<void>();
     progress.begin();
+    BackgroundWork.begin(BackgroundWorkKind.sync);
     try {
-      await SyncBackgroundService.start(l10n, askNotifications: !silent);
       if (!await _apiClient.checkVersion(_getServer())) {
         if (!silent && l10n != null) {
           botToast(l10n.sync_failed, second: 5);
@@ -205,7 +222,7 @@ class SyncServer extends _$SyncServer {
       // Cheap safety net: covers a row created earlier in this same running
       // session, which the once-at-launch sweep in main.dart couldn't have
       // seen yet. See lib/utils/client_id.dart.
-      await backfillMissingClientIds();
+      await DatabaseWorker.instance.run<void>('backfill', null);
       if (!ref.mounted) return false;
 
       final notifier = ref.read(synchingProvider(syncId: syncId).notifier);
@@ -235,9 +252,9 @@ class SyncServer extends _$SyncServer {
       return false;
     } finally {
       try {
-        await SyncBackgroundService.stop();
-      } finally {
         progress.finish();
+        BackgroundWork.end(BackgroundWorkKind.sync);
+      } finally {
         _syncIdle = null;
         idle.complete();
       }
@@ -427,7 +444,9 @@ class SyncServer extends _$SyncServer {
     ref.invalidate(blendLevelStateProvider);
     ref.invalidate(flexSchemeColorStateProvider);
     ref.invalidate(pureBlackDarkModeStateProvider);
+    ref.invalidate(tintSurfacesStateProvider);
     ref.invalidate(floatingNavigationBarStateProvider);
+    ref.invalidate(showUpdatesBadgeStateProvider);
     ref.invalidate(l10nLocaleStateProvider);
     ref.invalidate(extensionsRepoStateProvider(ItemType.manga));
     ref.invalidate(extensionsRepoStateProvider(ItemType.anime));
@@ -437,7 +456,7 @@ class SyncServer extends _$SyncServer {
 
 /// Triggers auto sync if sync is enabled, user is logged in, autoSyncFrequency > 0,
 /// and enough time has elapsed since lastSync.
-Future<void> autoSyncIfDue(WidgetRef ref, {int syncId = 1}) async {
+Future<void> autoSyncIfDue(dynamic ref, {int syncId = 1}) async {
   if (!ref.read(appUnlockedStateProvider)) return;
 
   final syncPrefs = ref.read(synchingProvider(syncId: syncId));

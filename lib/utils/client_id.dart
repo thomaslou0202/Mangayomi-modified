@@ -1,16 +1,7 @@
-import 'package:mangayomi/services/database_worker.dart';
 
 import 'dart:math';
 
-import 'package:isar_community/isar.dart';
-import 'package:mangayomi/main.dart';
-import 'package:mangayomi/models/category.dart';
-import 'package:mangayomi/models/chapter.dart';
-import 'package:mangayomi/models/history.dart';
-import 'package:mangayomi/models/manga.dart';
-import 'package:mangayomi/models/track.dart';
-import 'package:mangayomi/models/update.dart';
-import 'package:mangayomi/repositories/db_write_queue.dart';
+import 'package:mangayomi/repositories/changed_part_repository.dart';
 
 /// Generates a `clientId`: a value made once when a synced row is created,
 /// then only ever compared, never regenerated for that row again (see
@@ -42,95 +33,5 @@ int generateClientId() {
 /// pre-existing rows from before this field existed, and any created during
 /// the current session. Cheap to call often - `clientId` is indexed, so once
 /// caught up this is just six empty indexed lookups.
-///
-/// Called once at app startup (covers old data promptly), and again right
-/// before a sync's upload is built (covers a row made earlier in the same
-/// session, which startup's sweep couldn't have seen yet).
-///
-/// The startup and sync sweeps both run on the database worker. Native
-/// transactions are bounded to avoid stalling reader writes in other isolates.
 Future<void> backfillMissingClientIds() =>
-    DatabaseWorker.instance.run<void>('backfill');
-
-/// Re-read inside each transaction so a user's concurrent edit is never
-/// replaced by an old snapshot gathered before the transaction started.
-Future<void> backfillClientIdsInWorker() async {
-  Future<void> fill<T>(
-    IsarCollection<T> collection,
-    List<T> missing,
-    int? Function(T) idOf,
-    int? Function(T) clientIdOf,
-    void Function(T, int) assign,
-  ) async {
-    for (var start = 0; start < missing.length; start += 100) {
-      await dbWriteQueue.run(
-        () => isar.writeTxnSync(() {
-          for (final snapshot in missing.skip(start).take(100)) {
-            final id = idOf(snapshot);
-            if (id == null) continue;
-            final current = collection.getSync(id);
-            if (current == null || clientIdOf(current) != null) continue;
-            assign(current, generateClientId());
-            collection.putSync(current);
-          }
-        }),
-      );
-      await Future<void>.delayed(Duration.zero);
-    }
-  }
-
-  await fill(
-    isar.categorys,
-    isar.categorys.where().clientIdIsNull().findAllSync(),
-    (r) => r.id,
-    (r) => r.clientId,
-    (r, id) => r
-      ..clientId = id
-      ..updatedAt = DateTime.now().millisecondsSinceEpoch,
-  );
-  await fill(
-    isar.mangas,
-    isar.mangas.where().clientIdIsNull().findAllSync(),
-    (r) => r.id,
-    (r) => r.clientId,
-    (r, id) => r
-      ..clientId = id
-      ..updatedAt = DateTime.now().millisecondsSinceEpoch,
-  );
-  await fill(
-    isar.chapters,
-    isar.chapters.where().clientIdIsNull().findAllSync(),
-    (r) => r.id,
-    (r) => r.clientId,
-    (r, id) => r
-      ..clientId = id
-      ..updatedAt = DateTime.now().millisecondsSinceEpoch,
-  );
-  await fill(
-    isar.tracks,
-    isar.tracks.where().clientIdIsNull().findAllSync(),
-    (r) => r.id,
-    (r) => r.clientId,
-    (r, id) => r
-      ..clientId = id
-      ..updatedAt = DateTime.now().millisecondsSinceEpoch,
-  );
-  await fill(
-    isar.historys,
-    isar.historys.where().clientIdIsNull().findAllSync(),
-    (r) => r.id,
-    (r) => r.clientId,
-    (r, id) => r
-      ..clientId = id
-      ..updatedAt = DateTime.now().millisecondsSinceEpoch,
-  );
-  await fill(
-    isar.updates,
-    isar.updates.where().clientIdIsNull().findAllSync(),
-    (r) => r.id,
-    (r) => r.clientId,
-    (r, id) => r
-      ..clientId = id
-      ..updatedAt = DateTime.now().millisecondsSinceEpoch,
-  );
-}
+    changedPartRepository.backfillMissingClientIds(generateClientId);

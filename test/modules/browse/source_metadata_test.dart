@@ -1,3 +1,6 @@
+import 'package:flex_color_scheme/flex_color_scheme.dart';
+import 'package:shiori/shiori.dart';
+
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -68,6 +71,13 @@ void main() {
           ),
         ],
         child: MaterialApp(
+          theme: buildShioriTheme(
+            brightness: Brightness.dark,
+            colors: FlexColor.schemesList[2].dark,
+            tintSurfaces: false,
+            blendLevel: 10,
+            density: ShioriDensity.phone,
+          ),
           locale: const Locale('en'),
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,

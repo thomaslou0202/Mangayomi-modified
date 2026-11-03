@@ -9,7 +9,6 @@
 // can arrive even when the local copy is already newer) and leaves it to
 // the caller - which already deals in Riverpod state - to decide what to
 // invalidate.
-import 'package:mangayomi/main.dart';
 import 'package:mangayomi/models/category.dart';
 import 'package:mangayomi/models/chapter.dart';
 import 'package:mangayomi/models/history.dart';
@@ -19,7 +18,6 @@ import 'package:mangayomi/models/track.dart';
 import 'package:mangayomi/models/update.dart';
 import 'package:mangayomi/repositories/category_repository.dart';
 import 'package:mangayomi/repositories/chapter_repository.dart';
-import 'package:mangayomi/repositories/db_write_queue.dart';
 import 'package:mangayomi/repositories/history_repository.dart';
 import 'package:mangayomi/repositories/manga_repository.dart';
 import 'package:mangayomi/repositories/settings_repository.dart';
@@ -35,62 +33,45 @@ class SyncEntityApplier {
   /// upserts compare updatedAt and the sync checkpoint advances only at the end.
   Future<bool> apply(Map<String, dynamic> response) async {
     var settingsChanged = false;
-    Future<void> transaction(void Function() work) =>
-        dbWriteQueue.run(() => isar.writeTxnSync(work));
-    Future<void> rows(
-      String key,
-      void Function(Map<String, dynamic>) apply,
-    ) async {
-      final list = response[key] as List? ?? const [];
-      for (var start = 0; start < list.length; start += 100) {
-        final end = (start + 100).clamp(0, list.length);
-        await transaction(() {
-          for (var i = start; i < end; i++) {
-            apply(list[i] as Map<String, dynamic>);
-          }
-        });
-        await Future<void>.delayed(Duration.zero);
-      }
-    }
+    await mangaRepository.writeTransaction(() {
+      final remaps = _MangaChapterRemaps(
+        manga: (response['mangaClientIdRemap'] as Map?)?.map(
+          (k, v) => MapEntry(int.parse(k as String), v as int),
+        ),
+        chapter: (response['chapterClientIdRemap'] as Map?)?.map(
+          (k, v) => MapEntry(int.parse(k as String), v as int),
+        ),
+      );
+      if (remaps.manga != null) _applyMangaRemap(remaps.manga!);
+      if (remaps.chapter != null) _applyChapterRemap(remaps.chapter!);
 
-    for (final key in ['mangaClientIdRemap', 'chapterClientIdRemap']) {
-      final entries = (response[key] as Map?)?.entries.toList() ?? const [];
-      for (var start = 0; start < entries.length; start += 100) {
-        final remap = <int, int>{
-          for (final entry in entries.skip(start).take(100))
-            int.parse(entry.key as String): entry.value as int,
-        };
-        await transaction(
-          () => key == 'mangaClientIdRemap'
-              ? _applyMangaRemap(remap)
-              : _applyChapterRemap(remap),
-        );
+      for (final row in (response['categories'] as List? ?? [])) {
+        _applyCategory(row as Map<String, dynamic>);
       }
-    }
-    await rows('categories', _applyCategory);
-    await rows('manga', _applyManga);
-    await rows('chapters', _applyChapter);
-    await rows('tracks', _applyTrack);
-    await rows('histories', _applyHistory);
-    await rows('updates', _applyUpdate);
-    if (response['settings'] != null) {
-      await transaction(() {
+      for (final row in (response['manga'] as List? ?? [])) {
+        _applyManga(row as Map<String, dynamic>);
+      }
+      for (final row in (response['chapters'] as List? ?? [])) {
+        _applyChapter(row as Map<String, dynamic>);
+      }
+      for (final row in (response['tracks'] as List? ?? [])) {
+        _applyTrack(row as Map<String, dynamic>);
+      }
+      for (final row in (response['histories'] as List? ?? [])) {
+        _applyHistory(row as Map<String, dynamic>);
+      }
+      for (final row in (response['updates'] as List? ?? [])) {
+        _applyUpdate(row as Map<String, dynamic>);
+      }
+      if (response['settings'] != null) {
         settingsChanged = _applySettings(
           response['settings'] as Map<String, dynamic>,
         );
-      });
-    }
-    final tombstones = response['tombstones'] as Map? ?? const {};
-    for (final entry in tombstones.entries) {
-      final ids = entry.value as List;
-      for (var start = 0; start < ids.length; start += 100) {
-        await transaction(
-          () => _applyTombstones({
-            entry.key as String: ids.skip(start).take(100).toList(),
-          }),
-        );
       }
-    }
+
+      final tombstones = response['tombstones'] as Map<String, dynamic>?;
+      if (tombstones != null) _applyTombstones(tombstones);
+    });
     return settingsChanged;
   }
 
@@ -267,7 +248,7 @@ class SyncEntityApplier {
       ..trackingUrl = wire['trackingUrl'] as String?
       ..itemType = itemTypeFromWire(wire['itemType'] as String)
       ..updatedAt = incoming;
-    isar.tracks.putSync(track);
+    trackRepository.putSync(track);
   }
 
   void _applyHistory(Map<String, dynamic> wire) {
@@ -368,27 +349,27 @@ class SyncEntityApplier {
   void _applyTombstones(Map<String, dynamic> tombstones) {
     for (final clientId in (tombstones['categories'] as List? ?? [])) {
       final row = categoryRepository.getByClientId(clientId as int);
-      if (row != null) isar.categorys.deleteSync(row.id!);
+      if (row != null) categoryRepository.deleteSync(row.id!);
     }
     for (final clientId in (tombstones['manga'] as List? ?? [])) {
       final row = mangaRepository.getByClientId(clientId as int);
-      if (row != null) isar.mangas.deleteSync(row.id!);
+      if (row != null) mangaRepository.deleteSync(row.id!);
     }
     for (final clientId in (tombstones['chapters'] as List? ?? [])) {
       final row = chapterRepository.getByClientId(clientId as int);
-      if (row != null) isar.chapters.deleteSync(row.id!);
+      if (row != null) chapterRepository.deleteSync(row.id!);
     }
     for (final clientId in (tombstones['tracks'] as List? ?? [])) {
       final row = trackRepository.getByClientId(clientId as int);
-      if (row != null) isar.tracks.deleteSync(row.id!);
+      if (row != null) trackRepository.deleteSync(row.id!);
     }
     for (final clientId in (tombstones['histories'] as List? ?? [])) {
       final row = historyRepository.getByClientId(clientId as int);
-      if (row != null) isar.historys.deleteSync(row.id!);
+      if (row != null) historyRepository.deleteSync(row.id!);
     }
     for (final clientId in (tombstones['updates'] as List? ?? [])) {
       final row = updateRepository.getByClientId(clientId as int);
-      if (row != null) isar.updates.deleteSync(row.id!);
+      if (row != null) updateRepository.deleteSync(row.id!);
     }
   }
 }
@@ -402,5 +383,12 @@ Settings _preserveDeviceLocalSettings(Settings incoming, Settings current) {
     ..askDownloadDestination = current.askDownloadDestination
     ..androidProxyServer = current.androidProxyServer
     ..jrePath = current.jrePath
-    ..extensionServerPath = current.extensionServerPath;
+    ..extensionServerPath = current.extensionServerPath
+    ..updatesLastSeenAt = current.updatesLastSeenAt;
+}
+
+class _MangaChapterRemaps {
+  final Map<int, int>? manga;
+  final Map<int, int>? chapter;
+  _MangaChapterRemaps({this.manga, this.chapter});
 }

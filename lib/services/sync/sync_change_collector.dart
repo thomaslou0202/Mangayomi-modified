@@ -5,7 +5,6 @@ import 'package:mangayomi/repositories/changed_part_repository.dart';
 // local rows -> wire, instead of wire -> local rows.
 import 'dart:math';
 
-import 'package:mangayomi/main.dart';
 import 'package:mangayomi/models/category.dart';
 import 'package:mangayomi/models/changed.dart';
 import 'package:mangayomi/models/chapter.dart';
@@ -14,7 +13,7 @@ import 'package:mangayomi/models/manga.dart';
 import 'package:mangayomi/models/settings.dart';
 import 'package:mangayomi/models/track.dart';
 import 'package:mangayomi/models/update.dart';
-import 'package:mangayomi/modules/more/settings/sync/providers/sync_providers.dart';
+import 'package:mangayomi/providers/sync_providers.dart';
 import 'package:mangayomi/repositories/category_repository.dart';
 import 'package:mangayomi/repositories/chapter_repository.dart';
 import 'package:mangayomi/repositories/history_repository.dart';
@@ -36,6 +35,7 @@ const _deviceLocalSettingsKeys = {
   'androidProxyServer',
   'jrePath',
   'extensionServerPath',
+  'updatesLastSeenAt',
 };
 
 // Per-snapshot memoization avoids a manga lookup for every chapter/history row.
@@ -274,7 +274,7 @@ Map<String, dynamic>? _mangaToWire(Manga m, {int? forcedUpdatedAt}) {
     'customCoverFromTracker': m.customCoverFromTracker,
     'smartUpdateDays': m.smartUpdateDays,
     'categoryClientIds': (m.categories ?? [])
-        .map((id) => isar.categorys.getSync(id)?.clientId)
+        .map((id) => categoryRepository.findById(id)?.clientId)
         .nonNulls
         .toList(),
     'updatedAt': forcedUpdatedAt ?? m.updatedAt ?? 0,

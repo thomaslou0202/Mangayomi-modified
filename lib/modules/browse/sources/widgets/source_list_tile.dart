@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:shiori/shiori.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mangayomi/repositories/source_repository.dart';
 import 'package:mangayomi/models/manga.dart';
 import 'package:mangayomi/models/source.dart';
+import 'package:mangayomi/modules/widgets/entry_badge_chip.dart';
 import 'package:mangayomi/modules/widgets/tv_row_button.dart';
 import 'package:mangayomi/providers/l10n_providers.dart';
 import 'package:mangayomi/utils/cached_network.dart';
-import 'package:mangayomi/utils/extensions/build_context_extensions.dart';
 import 'package:mangayomi/utils/item_type_localization.dart';
 import 'package:mangayomi/utils/language.dart';
 
@@ -38,101 +39,45 @@ class SourceListTile extends StatelessWidget {
           }
           context.push('/mangaHome', extra: (source, false));
         },
-        leading: Container(
-          height: 37,
-          width: 37,
-          decoration: BoxDecoration(
-            color: Theme.of(context).secondaryHeaderColor
-                .withValues(alpha: 0.5),
-            borderRadius: BorderRadius.circular(5),
-          ),
-          child: (source.iconUrl ?? '').isEmpty
-              ? const Icon(Icons.extension_rounded)
-              : cachedNetworkImage(
-                  imageUrl: source.iconUrl ?? '',
-                  fit: BoxFit.contain,
-                  width: 37,
-                  height: 37,
-                  errorWidget: const SizedBox(
-                    width: 37,
-                    height: 37,
-                    child: Center(child: Icon(Icons.extension_rounded)),
-                  ),
-                  useCustomNetworkImage: false,
-                ),
-        ),
-        subtitle: Row(
-          children: [
-            Text(
-              completeLanguageName((source.lang ?? '').toLowerCase()),
-              style: const TextStyle(fontWeight: FontWeight.w300, fontSize: 12),
-            ),
-            if (source.isNsfw ?? false)
-              Padding(
-                padding: const EdgeInsets.only(left: 4),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 4,
-                    vertical: 1,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.red.withValues(alpha: 0.8),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    context.l10n.adult_content,
-                    style: const TextStyle(
-                      fontSize: 8,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-              ),
-          ],
-        ),
+        leading: SourceIcon(iconUrl: source.iconUrl),
+        subtitle: SourceMeta(source: source),
         title: Text(
           !isLocal
               ? _sourceName(source, context)
               : "${context.l10n.local_source} ${source.itemType.localized(context.l10n)}",
         ),
-        trailing: SizedBox(
-          width: 150,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              Flexible(
-                child: TextButton(
-                  style: const ButtonStyle(
-                    padding: WidgetStatePropertyAll(EdgeInsets.all(10)),
-                  ),
-                  onPressed: () =>
-                      context.push('/mangaHome', extra: (source, true)),
-                  child: Text(
-                    context.l10n.latest,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+        // As wide as its actions: a longer word for "Latest" in another
+        // language is not cut.
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          spacing: ShioriSpace.s4,
+          children: [
+            ShioriButton.quiet(
+              label: context.l10n.latest,
+              onPressed: () =>
+                  context.push('/mangaHome', extra: (source, true)),
+            ),
+            if (!isLocal)
+              IconButton(
+                padding: const EdgeInsets.all(0),
+                onPressed: () {
+                  sourceRepository.save(
+                    source..isPinned = !(source.isPinned ?? false),
+                  );
+                },
+                tooltip: context.l10n.pin,
+                icon: Icon(
+                  Symbols.push_pin_rounded,
+                  fill: (source.isPinned ?? false) ? 1 : 0,
+                  color: (source.isPinned ?? false)
+                      ? context.shiori.color.accentInk
+                      : null,
                 ),
-              ),
-              const SizedBox(width: 10),
-              if (!isLocal)
-                IconButton(
-                  padding: const EdgeInsets.all(0),
-                  onPressed: () {
-                    sourceRepository.save(
-                      source..isPinned = !(source.isPinned ?? false),
-                    );
-                  },
-                  icon: Icon(
-                    Icons.push_pin_outlined,
-                    color: (source.isPinned ?? false)
-                        ? context.primaryColor
-                        : null,
-                  ),
-                ),
-            ],
-          ),
+              )
+            else
+              // The pin's room, kept so Latest lines up with the rows above.
+              SizedBox.square(dimension: context.shiori.density.minTarget),
+          ],
         ),
       ),
     );
@@ -185,37 +130,13 @@ class TvSourceRow extends StatelessWidget {
               onTap: () => _openPopular(context),
               child: Padding(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 8,
+                  horizontal: ShioriSpace.s12,
+                  vertical: ShioriSpace.s8,
                 ),
                 child: Row(
                   children: [
-                    Container(
-                      height: 37,
-                      width: 37,
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).secondaryHeaderColor
-                            .withValues(alpha: 0.5),
-                        borderRadius: BorderRadius.circular(5),
-                      ),
-                      child: (source.iconUrl ?? '').isEmpty
-                          ? const Icon(Icons.extension_rounded)
-                          : cachedNetworkImage(
-                              imageUrl: source.iconUrl ?? '',
-                              fit: BoxFit.contain,
-                              width: 37,
-                              height: 37,
-                              errorWidget: const SizedBox(
-                                width: 37,
-                                height: 37,
-                                child: Center(
-                                  child: Icon(Icons.extension_rounded),
-                                ),
-                              ),
-                              useCustomNetworkImage: false,
-                            ),
-                    ),
-                    const SizedBox(width: 14),
+                    SourceIcon(iconUrl: source.iconUrl),
+                    const SizedBox(width: ShioriSpace.s12),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -225,45 +146,11 @@ class TvSourceRow extends StatelessWidget {
                             !isLocal
                                 ? _sourceName(source, context)
                                 : "${context.l10n.local_source} ${source.itemType.localized(context.l10n)}",
-                            style: const TextStyle(fontSize: 16),
+                            style: context.shiori.text.body,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
-                          Row(
-                            children: [
-                              Text(
-                                completeLanguageName(
-                                  (source.lang ?? '').toLowerCase(),
-                                ),
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w300,
-                                  fontSize: 12,
-                                ),
-                              ),
-                              if (source.isNsfw ?? false)
-                                Padding(
-                                  padding: const EdgeInsets.only(left: 4),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 4,
-                                      vertical: 1,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: Colors.red.withValues(alpha: 0.8),
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: Text(
-                                      context.l10n.adult_content,
-                                      style: const TextStyle(
-                                        fontSize: 8,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          ),
+                          SourceMeta(source: source),
                         ],
                       ),
                     ),
@@ -272,20 +159,23 @@ class TvSourceRow extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(width: 6),
+          const SizedBox(width: ShioriSpace.s8),
           TvRowButton(
             focusNode: latestNode,
             onTap: () => context.push('/mangaHome', extra: (source, true)),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              padding: const EdgeInsets.symmetric(
+                horizontal: ShioriSpace.s12,
+                vertical: ShioriSpace.s12,
+              ),
               child: Text(
                 context.l10n.latest,
-                style: TextStyle(color: context.primaryColor),
+                style: TextStyle(color: context.shiori.color.accentInk),
               ),
             ),
           ),
           if (!isLocal) ...[
-            const SizedBox(width: 6),
+            const SizedBox(width: ShioriSpace.s8),
             TvRowButton(
               focusNode: pinNode,
               onTap: () {
@@ -294,11 +184,12 @@ class TvSourceRow extends StatelessWidget {
                 );
               },
               child: Padding(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(ShioriSpace.s12),
                 child: Icon(
-                  Icons.push_pin_outlined,
+                  Symbols.push_pin_rounded,
+                  fill: (source.isPinned ?? false) ? 1 : 0,
                   color: (source.isPinned ?? false)
-                      ? context.primaryColor
+                      ? context.shiori.color.accentInk
                       : null,
                 ),
               ),
@@ -306,6 +197,67 @@ class TvSourceRow extends StatelessWidget {
           ],
         ],
       ),
+    );
+  }
+}
+
+/// A source's or an extension's icon, on a quiet tile while it loads or
+/// when it has none.
+class SourceIcon extends StatelessWidget {
+  const SourceIcon({super.key, required this.iconUrl, this.size = 37});
+
+  final String? iconUrl;
+
+  /// The side of the tile: a list row's by default, larger on a detail page.
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final placeholder = Center(
+      child: Icon(Symbols.extension_rounded, size: size * 0.6),
+    );
+    final url = iconUrl ?? '';
+    return Container(
+      height: size,
+      width: size,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: context.shiori.color.ink2,
+        borderRadius: BorderRadius.circular(ShioriShape.cover),
+      ),
+      child: url.isEmpty
+          ? placeholder
+          : cachedNetworkImage(
+              imageUrl: url,
+              fit: BoxFit.contain,
+              width: size,
+              height: size,
+              errorWidget: placeholder,
+              useCustomNetworkImage: false,
+            ),
+    );
+  }
+}
+
+/// A source's language, and an NSFW badge when it carries one.
+class SourceMeta extends StatelessWidget {
+  const SourceMeta({super.key, required this.source});
+
+  final Source source;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = context.shiori;
+    return Row(
+      spacing: ShioriSpace.s4,
+      children: [
+        Text(
+          languageName(context, source.lang!.toLowerCase()),
+          style: tokens.caption,
+        ),
+        if (source.isNsfw ?? false)
+          EntryBadgeChip(label: 'NSFW', tone: tokens.color.error),
+      ],
     );
   }
 }

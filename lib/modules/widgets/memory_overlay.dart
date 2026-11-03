@@ -1,5 +1,7 @@
-import 'package:flutter/material.dart';
 import 'package:mangayomi/providers/l10n_providers.dart';
+// shiori-file: a developer overlay drawn over any screen in fixed colours
+import 'package:flutter/material.dart';
+import 'package:shiori/shiori.dart';
 import 'package:mangayomi/utils/memory_probe.dart';
 import 'package:mangayomi/utils/platform_utils.dart';
 
@@ -32,7 +34,7 @@ class MemoryOverlay extends StatelessWidget {
         ignoring: !interactive,
         child: Material(
           color: Colors.black.withValues(alpha: 0.78),
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(ShioriShape.cover),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             child: ListenableBuilder(
@@ -96,10 +98,14 @@ class MemoryOverlay extends StatelessWidget {
           style: style,
         ),
         Text(
-          context.l10n.memory_cache_pressure(
-            (pressure * 100).toStringAsFixed(0),
-            stats.samples,
-          ),
+          'pages ${formatBytes(latest.decodedBytes)}'
+          ' / ${formatBytes(latest.decodedMaxBytes)}'
+          '   n ${latest.decodedCount}   peak ${formatBytes(stats.peakDecodedBytes)}',
+          style: style,
+        ),
+        Text(
+          'full  ${(pressure * 100).toStringAsFixed(0)}% of '
+          '${stats.samples} samples',
           style: style.copyWith(color: pressureColour),
         ),
         if (isTv)
@@ -113,17 +119,11 @@ class MemoryOverlay extends StatelessWidget {
             children: [
               TextButton(
                 onPressed: probe.reset,
-                child: Text(
-                  context.l10n.reset,
-                  style: const TextStyle(fontSize: 12),
-                ),
+                child: Text('Reset', style: context.shiori.text.meta),
               ),
               TextButton(
                 onPressed: onClose,
-                child: Text(
-                  context.l10n.hide_action,
-                  style: const TextStyle(fontSize: 12),
-                ),
+                child: Text('Hide', style: context.shiori.text.meta),
               ),
             ],
           ),
