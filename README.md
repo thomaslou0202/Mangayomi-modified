@@ -1,3 +1,12 @@
+# Mangayomi Modified
+
+這是 Mangayomi 客製版的原始碼與發行倉庫。
+
+- [Windows ZIP 與 Android APK](https://github.com/thomaslou0202/Mangayomi-modified/releases)
+- [漫畫、小說與動畫擴充套件庫](https://github.com/thomaslou0202/Mangayomi-Plugins)
+
+Windows 和 Android 的發行流程由 GitHub Actions 手動啟動。發行前先在 `app-release.json` 設定版本、組建編號和對應的原始碼提交。
+
 <p align="center">
  <img width=200px height=200px src="assets/app_icons/icon-red.png"/>
 </p>

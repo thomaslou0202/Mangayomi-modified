@@ -33,7 +33,7 @@ void main() {
   test('custom distribution uses the owner repository', () {
     expect(
       appReleaseApiUrl,
-      'https://api.github.com/repos/thomaslou0202/Mangayomi-Plugins/releases/latest',
+      'https://api.github.com/repos/thomaslou0202/Mangayomi-modified/releases/latest',
     );
   });
   test('upgrade from prior custom versions', () {

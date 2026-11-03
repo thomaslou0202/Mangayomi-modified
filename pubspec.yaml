@@ -184,7 +184,7 @@ inno_bundle:
   name: Mangayomi
   url: https://github.com/kodjodevf/mangayomi/
   support_url: https://github.com/kodjodevf/mangayomi/
-  updates_url: https://github.com/thomaslou0202/Mangayomi-Plugins/releases/
+  updates_url: https://github.com/thomaslou0202/Mangayomi-modified/releases/
   # The app's own icon: without it the installer showed inno_bundle's.
   installer_icon: windows/runner/resources/app_icon.ico
   languages:

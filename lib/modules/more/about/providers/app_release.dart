@@ -1,5 +1,5 @@
 /// The custom app is distributed independently from upstream Mangayomi.
-const appReleaseRepository = 'thomaslou0202/Mangayomi-Plugins';
+const appReleaseRepository = 'thomaslou0202/Mangayomi-modified';
 const appReleaseRepositoryUrl = 'https://github.com/$appReleaseRepository';
 const appReleaseApiUrl =
     'https://api.github.com/repos/$appReleaseRepository/releases/latest';
