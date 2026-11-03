@@ -39,6 +39,7 @@ import 'package:mangayomi/modules/widgets/custom_draggable_tabbar.dart';
 import 'package:mangayomi/modules/widgets/error_state.dart';
 import 'package:mangayomi/providers/l10n_providers.dart';
 import 'package:mangayomi/services/get_html_content.dart';
+import 'package:mangayomi/services/http/foreground_novel_webview.dart';
 import 'package:mangayomi/src/rust/api/epub.dart';
 import 'package:mangayomi/utils/platform_utils.dart';
 import 'package:mangayomi/utils/system_ui.dart';
@@ -49,12 +50,37 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:mangayomi/modules/reader_common/mixins/reader_auto_scroll.dart';
 
-class NovelReaderView extends ConsumerWidget {
+class NovelReaderView extends ConsumerStatefulWidget {
   final int chapterId;
-  NovelReaderView({super.key, required this.chapterId});
-  late final Chapter chapter = chapterRepository.getById(chapterId);
+  const NovelReaderView({super.key, required this.chapterId});
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<NovelReaderView> createState() => _NovelReaderViewState();
+}
+
+class _NovelReaderViewState extends ConsumerState<NovelReaderView> {
+  late final Chapter chapter = chapterRepository.getById(widget.chapterId);
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!Platform.isWindows) return;
+    final route = ModalRoute.of(context);
+    ForegroundNovelWebView.register(
+      this,
+      chapter.url,
+      () => mounted && route?.isCurrent == true,
+    );
+  }
+
+  @override
+  void dispose() {
+    ForegroundNovelWebView.unregister(this);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final result = ref.watch(getHtmlContentProvider(chapter: chapter));
 
     return NovelWebView(chapter: chapter, result: result);

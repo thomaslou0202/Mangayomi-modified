@@ -1,6 +1,7 @@
 import 'dart:ui' show Size;
 
 import 'package:mangayomi/services/http/webview_request_profile.dart';
+import 'package:mangayomi/services/http/foreground_novel_webview.dart';
 
 import 'dart:convert';
 
@@ -740,6 +741,21 @@ Future<void> _evaluateJavascriptViaWebview(HttpRequest request) async {
         [];
     final time = data['time'] as int? ?? 30;
 
+    if (headers.remove(ForegroundNovelWebView.requestHeader) == '1') {
+      final ua = settingsRepository.currentOrNull?.userAgent;
+      final result = await ForegroundNovelWebView.capture(
+        url: url,
+        scripts: scripts,
+        environment: webViewEnvironment,
+        userAgent: ua == defaultUserAgent ? null : ua,
+      );
+      request.response
+        ..headers.contentType = ContentType.json
+        ..write(jsonEncode({'result': result}))
+        ..close();
+      return;
+    }
+
     int t = 0;
     bool timeOut = false;
     bool isOk = false;
@@ -788,6 +804,27 @@ Future<void> _evaluateJavascriptViaWebview(HttpRequest request) async {
       try {
         await headlessWebView?.dispose();
       } catch (_) {}
+    }
+    if (ForegroundNovelWebView.canCapture(url)) {
+      if (response.isEmpty) {
+        response = jsonEncode({
+          'kind': 'empty',
+          'url': url,
+          'readerForegroundSupported': true,
+        });
+      } else {
+        try {
+          final capture = jsonDecode(response);
+          if (capture is Map<String, dynamic>) {
+            response = jsonEncode({
+              ...capture,
+              'readerForegroundSupported': true,
+            });
+          }
+        } on FormatException {
+          // Extensions may use this bridge to return plain text.
+        }
+      }
     }
     request.response
       ..headers.contentType = ContentType.json
