@@ -101,7 +101,7 @@ jobs:
           test/modules/manga/reader/reader_leading_boundary_test.dart
           test/modules/manga/reader/reader_pages_test.dart
           test/services/webview_request_profile_test.dart
-            test/services/detail_refresh_state_test.dart
+          test/services/detail_refresh_state_test.dart
           test/modules/novel_illustration_test.dart
           test/modules/novel_inline_html_test.dart
           test/modules/novel_double_page_test.dart
@@ -229,7 +229,7 @@ jobs:
           test/modules/manga/reader/reader_leading_boundary_test.dart
           test/modules/manga/reader/reader_pages_test.dart
           test/services/webview_request_profile_test.dart
-            test/services/detail_refresh_state_test.dart
+          test/services/detail_refresh_state_test.dart
           test/modules/novel_illustration_test.dart
           test/modules/novel_inline_html_test.dart
           test/modules/novel_double_page_test.dart
