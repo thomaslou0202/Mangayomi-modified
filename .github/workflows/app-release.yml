@@ -101,6 +101,7 @@ jobs:
           test/modules/manga/reader/reader_leading_boundary_test.dart
           test/modules/manga/reader/reader_pages_test.dart
           test/services/webview_request_profile_test.dart
+            test/services/detail_refresh_state_test.dart
           test/modules/novel_illustration_test.dart
           test/modules/novel_inline_html_test.dart
           test/modules/novel_double_page_test.dart
@@ -113,6 +114,9 @@ jobs:
       - name: Package Windows release
         shell: pwsh
         run: |
+          $expected = '${{ needs.prepare.outputs.version }}+${{ needs.prepare.outputs.build }}'
+          $version = (Get-Item app/build/windows/x64/runner/Release/mangayomi.exe).VersionInfo.ProductVersion
+          if ($version -ne $expected) { throw "Windows product version '$version' does not match '$expected'" }
           New-Item -ItemType Directory -Path dist
           Copy-Item patches/release-support/RELEASE-NOTES.md app/build/windows/x64/runner/Release/INSTALL-zh-TW.md
           Copy-Item app/LICENSE app/build/windows/x64/runner/Release/LICENSE.Mangayomi.txt
@@ -225,6 +229,7 @@ jobs:
           test/modules/manga/reader/reader_leading_boundary_test.dart
           test/modules/manga/reader/reader_pages_test.dart
           test/services/webview_request_profile_test.dart
+            test/services/detail_refresh_state_test.dart
           test/modules/novel_illustration_test.dart
           test/modules/novel_inline_html_test.dart
           test/modules/novel_double_page_test.dart

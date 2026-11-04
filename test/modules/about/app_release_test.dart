@@ -19,6 +19,12 @@ Map<String, dynamic> release({String tag = 'v0.9.10+132'}) => {
 };
 
 void main() {
+  test('About displays the installed build number once', () {
+    expect(appVersionLabel('0.9.95', '138'), '0.9.95+138');
+    expect(appVersionLabel('0.9.95+138', '138'), '0.9.95+138');
+    expect(appVersionLabel('0.9.95', ''), '0.9.95');
+  });
+
   test('APK cache file changes with every release revision', () {
     expect(
       appReleaseApkFileName('0.9.10+132'),

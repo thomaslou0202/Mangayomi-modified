@@ -7,6 +7,7 @@ import 'package:shiori/shiori.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:mangayomi/eval/model/m_bridge.dart';
+import 'package:mangayomi/modules/more/about/providers/app_release.dart';
 import 'package:mangayomi/modules/more/about/providers/check_for_update.dart';
 import 'package:mangayomi/modules/more/about/providers/download_file_screen.dart';
 import 'package:mangayomi/modules/more/about/providers/get_package_info.dart';
@@ -52,7 +53,9 @@ class AboutScreen extends ConsumerWidget {
                         height: 88,
                       ),
                       Text(
-                        l10n.beta_version(data.version),
+                        l10n.beta_version(
+                          appVersionLabel(data.version, data.buildNumber),
+                        ),
                         style: context.shiori.caption,
                       ),
                     ],

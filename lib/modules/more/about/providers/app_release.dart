@@ -4,6 +4,11 @@ const appReleaseRepositoryUrl = 'https://github.com/$appReleaseRepository';
 const appReleaseApiUrl =
     'https://api.github.com/repos/$appReleaseRepository/releases/latest';
 
+String appVersionLabel(String version, String buildNumber) {
+  final build = buildNumber.trim();
+  return build.isEmpty || version.contains('+') ? version : '$version+$build';
+}
+
 /// Numeric release version, including Android/Windows's build revision.
 class AppReleaseVersion implements Comparable<AppReleaseVersion> {
   const AppReleaseVersion(this.major, this.minor, this.patch, this.build);
