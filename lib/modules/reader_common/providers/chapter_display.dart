@@ -37,7 +37,7 @@ String chapterDisplayName(
   AppLocalizations l10n, {
   required bool byNumber,
 }) {
-  final title = chapter.name ?? '';
+  final title = chapter.displayName ?? '';
   if (!byNumber) return title;
   final (_, number) = ChapterRecognition().rawSeasonAndNumber(
     manga.name ?? '',

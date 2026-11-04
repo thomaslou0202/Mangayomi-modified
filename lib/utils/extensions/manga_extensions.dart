@@ -4,6 +4,7 @@ import 'package:mangayomi/models/settings.dart';
 import 'package:mangayomi/repositories/download_repository.dart';
 import 'package:mangayomi/repositories/settings_repository.dart';
 import 'package:mangayomi/utils/chapter_recognition.dart';
+import 'package:mangayomi/utils/extensions/string_extensions.dart';
 
 /// Sort/identity keys that only bucket by season if numbering actually
 /// repeats across seasons (a real reset) — otherwise chapters key by raw
@@ -19,7 +20,7 @@ Map<int?, double?> _chapterSortKeys(
   final recognition = ChapterRecognition();
   final raw = <int?, (int, double?)>{
     for (final c in chapterList)
-      c.id: recognition.rawSeasonAndNumber(mangaTitle, c.name ?? ''),
+      c.id: recognition.rawSeasonAndNumber(mangaTitle, c.displayName ?? ''),
   };
   final episodeToSeasons = <double, Set<int>>{};
   for (final pair in raw.values) {
@@ -52,6 +53,11 @@ Map<int?, double?> _chapterSortKeys(
 }
 
 extension MangaExtensions on Manga {
+  bool get isLinovelib =>
+      itemType == ItemType.novel &&
+      (sourceId == 1827634460 ||
+          Uri.tryParse(link ?? '')?.host == 'tw.linovelib.com');
+
   /// Number of unread chapters, excluding chapters from scanlators the user has
   /// filtered out for this manga. Mirrors the chapter list's scanlator filter,
   /// so the library "unread" badge and the unread sort reflect what the user
@@ -191,8 +197,8 @@ extension MangaExtensions on Manga {
         break;
       case 3: // by name
         list.sort((a, b) {
-          if (a.name == null || b.name == null) return 0;
-          return a.name!.compareTo(b.name!);
+          if (a.displayName == null || b.displayName == null) return 0;
+          return a.displayName!.compareTo(b.displayName!);
         });
         break;
       case 1:
@@ -228,6 +234,18 @@ extension MangaExtensions on Manga {
       ];
     }
     if (!(settings.skipDuplicateChapters ?? true)) return list;
+    if (isLinovelib) {
+      // The numbered prefix can shift when a chapter is inserted or removed.
+      final currentUrl = current?.url?.trim().getUrlWithoutDomain;
+      final seen = <String>{};
+      return list.where((chapter) {
+        final url = chapter.url?.trim().getUrlWithoutDomain;
+        return chapter.id == current?.id ||
+            url == null ||
+            url.isEmpty ||
+            (url != currentUrl && seen.add(url));
+      }).toList();
+    }
     final sortKeys = _chapterSortKeys(name ?? '', list);
     // The copy kept for each chapter number: the first one, unless another
     // is [current] or from its scanlator.
@@ -278,7 +296,10 @@ extension MangaExtensions on Manga {
     final recognition = ChapterRecognition();
     final numbers = <int>{};
     for (final c in list) {
-      final (_, ep) = recognition.rawSeasonAndNumber(mangaTitle, c.name ?? '');
+      final (_, ep) = recognition.rawSeasonAndNumber(
+        mangaTitle,
+        c.displayName ?? '',
+      );
       if (ep != null) numbers.add(ep.floor());
     }
     if (numbers.length < 2) return 0;

@@ -15,6 +15,11 @@ class Chapter {
 
   String? name;
 
+  /// Current catalogue label when a download still uses the original name.
+  String? catalogName;
+
+  String? get displayName => catalogName ?? name;
+
   String? url;
 
   String? dateUpload;
@@ -53,6 +58,7 @@ class Chapter {
     this.clientId,
     required this.mangaId,
     required this.name,
+    this.catalogName,
     this.url = '',
     this.dateUpload = '',
     this.isBookmarked = false,
@@ -78,6 +84,7 @@ class Chapter {
     lastPageRead = json['lastPageRead'];
     mangaId = json['mangaId'];
     name = json['name'];
+    catalogName = json['catalogName'];
     scanlator = json['scanlator'];
     url = json['url'];
     isFiller = json['isFiller'] ?? false;
@@ -98,6 +105,7 @@ class Chapter {
     'lastPageRead': lastPageRead,
     'mangaId': mangaId,
     'name': name,
+    if (catalogName != null) 'catalogName': catalogName,
     'scanlator': scanlator,
     'url': url,
     'isFiller': isFiller,

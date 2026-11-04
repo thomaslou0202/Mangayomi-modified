@@ -33,6 +33,7 @@ import 'package:mangayomi/services/chapter_cache.dart';
 import 'package:mangayomi/services/get_chapter_pages.dart';
 import 'package:mangayomi/services/downloaded_chapter.dart';
 import 'package:mangayomi/utils/reg_exp_matcher.dart';
+import 'package:mangayomi/utils/extensions/manga_extensions.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 
@@ -233,6 +234,82 @@ void main() {
       expect(db.mangas.getSync(1)!.lastRead, 1234);
       expect(db.mangas.getSync(1)!.favorite, false);
       expect(db.settings.getSync(227)!.chapterPageIndexList!.single.index, 16);
+    },
+  );
+
+  test(
+    'Linovelib refresh keeps chapter identity across catalogue renumbering',
+    () async {
+      const oldName = '0263 | 第十五卷 第二話';
+      const shiftedName = '0244 | 第十五卷 第二話';
+      const nextName = '0263 | 第十六卷 第七話';
+      const firstUrl = 'https://tw.linovelib.com/novel/2013/72237.html';
+      const nextUrl = 'https://tw.linovelib.com/novel/2013/122428.html';
+      db.writeTxnSync(() {
+        db.sources.putSync(db.sources.getSync(1)!..itemType = ItemType.novel);
+        db.mangas.putSync(
+          db.mangas.getSync(1)!
+            ..itemType = ItemType.novel
+            ..link = 'https://tw.linovelib.com/novel/2013.html',
+        );
+        db.chapters.putSync(
+          db.chapters.getSync(10)!
+            ..name = oldName
+            ..url = firstUrl
+            ..isBookmarked = true
+            ..lastPageRead = '17',
+        );
+        final newer = Chapter(id: 11, mangaId: 1, name: nextName, url: nextUrl)
+          ..manga.value = db.mangas.getSync(1);
+        db.chapters.putSync(newer);
+        newer.manga.saveSync();
+        db.downloads.putSync(
+          Download(
+            id: 10,
+            isDownload: true,
+            isStartDownload: false,
+            succeeded: 1,
+            failed: 0,
+            total: 1,
+          ),
+        );
+      });
+      final container = ProviderContainer(
+        overrides: [
+          getDetailProvider.overrideWith(
+            (ref, args) async => MManga(
+              chapters: [
+                MChapter(name: nextName, url: nextUrl),
+                MChapter(name: shiftedName, url: firstUrl),
+              ],
+            ),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await container.read(
+        updateMangaDetailProvider(
+          mangaId: 1,
+          isInit: false,
+          showToast: false,
+        ).future,
+      );
+
+      expect(db.chapters.countSync(), 2);
+      final first = db.chapters.getSync(10)!;
+      expect(first.name, oldName);
+      expect(first.displayName, shiftedName);
+      expect(first.lastPageRead, '17');
+      expect(first.isBookmarked, true);
+      expect(db.downloads.getSync(10)?.isDownload, true);
+      expect(db.chapters.getSync(11)?.url, nextUrl);
+      final work = db.mangas.getSync(1)!;
+      work.chapters.loadSync();
+      expect(work.getChapterListForReading().map((c) => c.url), [
+        firstUrl,
+        nextUrl,
+      ]);
     },
   );
 

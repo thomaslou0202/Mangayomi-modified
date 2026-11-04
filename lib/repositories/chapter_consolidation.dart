@@ -83,6 +83,7 @@ Future<ChapterConsolidation> consolidateChapterDuplicates(
   List<Chapter> chapters, {
   required String mangaName,
   required int now,
+  bool matchByName = true,
   required bool Function(int) isScheduled,
   Future<List<Directory>> Function(Chapter, {Settings? settings})?
   resolveDirectories,
@@ -144,6 +145,7 @@ Future<ChapterConsolidation> consolidateChapterDuplicates(
                 folder,
                 '$archiveName.mp4',
                 '$name.html',
+                '$archiveName.html',
               ].contains(p.basename(path)),
             )
             .toSet();
@@ -180,7 +182,7 @@ Future<ChapterConsolidation> consolidateChapterDuplicates(
   final recognition = ChapterRecognition();
   for (final c in chapters) {
     final url = c.url?.trim();
-    final label = c.name == null
+    final label = !matchByName || c.name == null
         ? null
         : recognition.chapterIdentityKey(mangaName, c.name!, c.scanlator ?? '');
     for (final (key, map) in [
