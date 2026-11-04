@@ -713,13 +713,26 @@ class _NovelWebViewState extends ConsumerState<NovelWebView>
                 if (widget.result.isRefreshing || widget.result.isReloading) {
                   return scaffoldWith(context, const ShioriLoading());
                 }
+                final detail = err.toString();
+                final url = widget.chapter.url;
+                final canOpenExternally =
+                    Platform.isWindows &&
+                    ForegroundNovelWebView.chapterKey(url) != null &&
+                    RegExp(
+                      r'LN-(?:CONTENT-TEMPORARY|READER-INCOMPLETE|READER-VIEWPORT|BROWSER)\b',
+                    ).hasMatch(detail);
                 return scaffoldWith(
                   context,
                   ErrorState(
-                    detail: err.toString(),
+                    detail: detail,
                     onRetry: () => ref.invalidate(
                       getHtmlContentProvider(chapter: widget.chapter),
                     ),
+                    secondaryLabel: context.l10n.open_in_browser,
+                    secondaryIcon: Symbols.open_in_browser_rounded,
+                    onSecondary: canOpenExternally
+                        ? () => ExternalBrowser.open(url!)
+                        : null,
                   ),
                 );
               },

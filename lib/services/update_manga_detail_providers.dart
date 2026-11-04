@@ -8,6 +8,7 @@ import 'package:mangayomi/repositories/update_repository.dart';
 import 'package:mangayomi/services/chapter_cache.dart';
 import 'package:mangayomi/services/downloaded_chapter.dart';
 import 'package:mangayomi/services/get_detail.dart';
+import 'package:mangayomi/utils/extensions/manga_extensions.dart';
 import 'package:mangayomi/utils/extensions/string_extensions.dart';
 import 'package:mangayomi/utils/fetch_interval.dart';
 import 'package:mangayomi/utils/utils.dart';
@@ -109,10 +110,12 @@ Future<dynamic> updateMangaDetail(
       final originalChapters = await chapterRepository.getAllByMangaIds([
         mangaId,
       ]);
+      final matchByName = !current.isLinovelib;
       final consolidated = await chapterRepository.consolidateDuplicatesAsync(
         originalChapters,
         mangaName: current.name ?? '',
         now: now,
+        matchByName: matchByName,
         isScheduled: isDownloadScheduled,
         resolveDirectories: downloadedMangaDirectories,
       );
@@ -149,7 +152,7 @@ Future<dynamic> updateMangaDetail(
       // Not parseChapterNumber either: that truncates, so 12, 12.1 and 12.5
       // all answer 12 and two of the three are dropped the same way.
       String? identityOf(Chapter c, {bool withScanlator = true}) {
-        if (c.name == null) return null;
+        if (!matchByName || c.name == null) return null;
         return recognition.chapterIdentityKey(
           manga.name ?? '',
           c.name!,
@@ -203,14 +206,14 @@ Future<dynamic> updateMangaDetail(
         if (url == null || url.isEmpty) continue;
         final key = url.getUrlWithoutDomain;
 
-        final compositeKey = chap.name == null
+        final compositeKey = !matchByName || chap.name == null
             ? null
             : recognition.chapterIdentityKey(
                 manga.name!,
                 chap.name!,
                 chap.scanlator ?? '',
               );
-        final episodeKey = chap.name == null
+        final episodeKey = !matchByName || chap.name == null
             ? null
             : recognition.chapterIdentityKey(manga.name!, chap.name!);
 
@@ -265,6 +268,9 @@ Future<dynamic> updateMangaDetail(
           }
           existing
             ..name = stored ? existing.name : chap.name
+            ..catalogName = !matchByName && stored && existing.name != chap.name
+                ? chap.name
+                : null
             ..url = active ? existing.url : url
             ..scanlator = stored ? existing.scanlator : chap.scanlator
             ..updatedAt = now
@@ -282,7 +288,7 @@ Future<dynamic> updateMangaDetail(
       }
       if (consolidated.updates.isNotEmpty) {
         for (final update in consolidated.updates) {
-          update.chapterName = update.chapter.value?.name;
+          update.chapterName = update.chapter.value?.displayName;
         }
         await updateRepository.putAllAsync(consolidated.updates);
       }

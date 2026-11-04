@@ -183,6 +183,7 @@ class ChapterRepository {
     List<Chapter> chapters, {
     required String mangaName,
     required int now,
+    bool matchByName = true,
     required bool Function(int) isScheduled,
     Future<List<Directory>> Function(Chapter, {Settings? settings})?
     resolveDirectories,
@@ -191,6 +192,7 @@ class ChapterRepository {
     chapters,
     mangaName: mangaName,
     now: now,
+    matchByName: matchByName,
     isScheduled: isScheduled,
     resolveDirectories: resolveDirectories,
   );
