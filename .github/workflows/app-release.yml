@@ -78,9 +78,9 @@ jobs:
           npm ci --ignore-scripts --no-audit --no-fund
           dart ../app/tool/export_comments_script.dart comments-focus.js
           node --test release-support/comments-locator.test.cjs
-      - name: Test novel rendering
+      - name: Test novel rendering and chapter refresh
         working-directory: app
-        run: flutter test --no-pub test/modules/novel_continuous_reader_test.dart test/modules/novel_inline_html_test.dart test/services/webview_request_profile_test.dart
+        run: flutter test --no-pub test/modules/novel_continuous_reader_test.dart test/modules/novel_inline_html_test.dart test/services/webview_request_profile_test.dart test/services/detail_refresh_state_test.dart
       - name: Build Windows release
         working-directory: app
         run: flutter build windows --release --no-pub --build-name=${{ needs.prepare.outputs.version }} --build-number=${{ needs.prepare.outputs.build }}
