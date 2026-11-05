@@ -6,11 +6,14 @@ import 'package:isar_community/isar.dart';
 import 'package:mangayomi/main.dart' as app;
 import 'package:mangayomi/models/chapter.dart';
 import 'package:mangayomi/models/download.dart';
+import 'package:mangayomi/models/manga.dart';
 import 'package:mangayomi/providers/storage_provider.dart';
 import 'package:mangayomi/services/library_chapter_summary.dart';
 import 'package:mangayomi/services/sync/sync_change_collector.dart';
 import 'package:mangayomi/services/sync/sync_entity_applier.dart';
 import 'package:mangayomi/utils/client_id.dart';
+import 'package:mangayomi/utils/extensions/manga_extensions.dart';
+import 'package:mangayomi/utils/linovelib_chapters.dart';
 
 /// One serial database worker. Native Isar transactions arbitrate writes across
 /// isolates; no Flutter Ref, lazy Isar link, or UI object crosses this boundary.
@@ -116,8 +119,17 @@ Future<void> _databaseEntry(List<Object?> arguments) async {
               .findAllSync()
               .toSet();
           final builder = LibrarySummaryBuilder();
+          final linovelibBooks = {
+            for (final manga in app.isar.mangas.where().findAllSync())
+              if (manga.isLinovelib) manga.id: manga,
+          };
           // Only the worker deserializes the large chapter collection.
           for (final chapter in app.isar.chapters.where().findAllSync()) {
+            final book = linovelibBooks[chapter.mangaId];
+            if (book != null &&
+                !linovelibChapterBelongsToBook(book.link, chapter.url)) {
+              continue;
+            }
             builder.add(
               mangaId: chapter.mangaId,
               read: chapter.isRead ?? false,

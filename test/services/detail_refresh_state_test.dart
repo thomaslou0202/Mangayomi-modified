@@ -34,6 +34,7 @@ import 'package:mangayomi/services/get_chapter_pages.dart';
 import 'package:mangayomi/services/downloaded_chapter.dart';
 import 'package:mangayomi/utils/reg_exp_matcher.dart';
 import 'package:mangayomi/utils/extensions/manga_extensions.dart';
+import 'package:mangayomi/utils/linovelib_chapters.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 
@@ -378,6 +379,71 @@ void main() {
     work.chapters.loadSync();
     expect(work.getChapterListForReading().map((c) => c.url), [url, otherUrl]);
   });
+
+  test(
+    'Linovelib chapter lists exclude the reported 8book migration leftovers',
+    () {
+      expect(
+        linovelibChapterBelongsToBook(
+          '/novel/2013.html',
+          '/novel/2013/72237.html',
+        ),
+        true,
+      );
+      expect(
+        linovelibChapterBelongsToBook(
+          '/novel/2013.html',
+          'https://tw.linovelib.com/novel/2013/72237_2.html',
+        ),
+        true,
+      );
+      expect(
+        linovelibChapterBelongsToBook(
+          '/novel/2013.html',
+          'https://tw.linovelib.com/novel/2014/72237.html',
+        ),
+        false,
+      );
+      db.writeTxnSync(() {
+        final work = db.mangas.getSync(1)!
+          ..itemType = ItemType.novel
+          ..link = 'https://tw.linovelib.com/novel/2013.html';
+        db.mangas.putSync(work);
+        final rows = [
+          db.chapters.getSync(10)!
+            ..name = '0263｜第十五卷 青少年期 人神篇 · 第二話「日記 後篇」'
+            ..url = 'https://www.8book.com/read/121051/?334504'
+            ..isBookmarked = true
+            ..lastPageRead = '17',
+          Chapter(
+            id: 11,
+            mangaId: 1,
+            name: '0243 | 第十五卷 青少年期 人神篇 第二話「日記 後篇」',
+            url: 'https://tw.linovelib.com/novel/2013/72237.html',
+          ),
+          Chapter(
+            id: 12,
+            mangaId: 1,
+            name: '0263 | 第十六卷 青年期 阿斯拉王國篇（前） 第七話「圖書迷宮」',
+            url: 'https://tw.linovelib.com/novel/2013/122428.html',
+          ),
+        ];
+        for (final chapter in rows) {
+          chapter.manga.value = work;
+          db.chapters.putSync(chapter);
+          chapter.manga.saveSync();
+        }
+      });
+      final work = db.mangas.getSync(1)!;
+      work.chapters.loadSync();
+      expect(work.getSortedFilteredChapters().map((c) => c.id), [12, 11]);
+      expect(work.getChapterListForReading().map((c) => c.id), [11, 12]);
+      expect(work.unreadChaptersCount(db.settings.getSync(227)!), 2);
+      expect(db.chapters.countSync(), 3);
+      expect(db.chapters.getSync(10)?.lastPageRead, '17');
+      expect(db.chapters.getSync(10)?.isBookmarked, true);
+    },
+  );
 
   test('duplicate labels merge references and leave one chapter', () async {
     db.writeTxnSync(() {

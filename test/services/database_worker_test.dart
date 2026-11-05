@@ -287,6 +287,41 @@ void main() {
   });
 
   test(
+    'library counts exclude migrated 8book chapters from a Linovelib book',
+    () async {
+      await app.isar.writeTxn(() async {
+        await app.isar.mangas.putAll([
+          book(1)
+            ..itemType = ItemType.novel
+            ..link = 'https://tw.linovelib.com/novel/2013.html',
+          book(2),
+        ]);
+        await app.isar.chapters.putAll([
+          Chapter(
+            mangaId: 1,
+            name: '0263｜第十五卷',
+            isBookmarked: true,
+            url: 'https://www.8book.com/read/121051/?334504',
+          ),
+          Chapter(
+            mangaId: 1,
+            name: '0263 | 第十六卷',
+            url: 'https://tw.linovelib.com/novel/2013/122428.html',
+          ),
+          Chapter(mangaId: 2, name: 'Chapter 1', url: '/chapter/1'),
+        ]);
+      });
+      final summary = await DatabaseWorker.instance
+          .run<Map<int, LibraryChapterSummary>>('summary');
+      expect(summary[1]?.total, 1);
+      expect(summary[1]?.unread, 1);
+      expect(summary[1]?.bookmarked, 0);
+      expect(summary[2]?.total, 1);
+      expect(await app.isar.chapters.count(), 3);
+    },
+  );
+
+  test(
     'new client IDs remain uploadable and do not reset reader progress',
     () async {
       await app.isar.writeTxn(() async {

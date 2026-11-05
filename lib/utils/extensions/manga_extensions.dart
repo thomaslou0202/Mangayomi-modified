@@ -5,6 +5,7 @@ import 'package:mangayomi/repositories/download_repository.dart';
 import 'package:mangayomi/repositories/settings_repository.dart';
 import 'package:mangayomi/utils/chapter_recognition.dart';
 import 'package:mangayomi/utils/extensions/string_extensions.dart';
+import 'package:mangayomi/utils/linovelib_chapters.dart';
 
 /// Sort/identity keys that only bucket by season if numbering actually
 /// repeats across seasons (a real reset) — otherwise chapters key by raw
@@ -55,8 +56,15 @@ Map<int?, double?> _chapterSortKeys(
 extension MangaExtensions on Manga {
   bool get isLinovelib =>
       itemType == ItemType.novel &&
+      !(isLocalArchive ?? false) &&
       (sourceId == 1827634460 ||
           Uri.tryParse(link ?? '')?.host == 'tw.linovelib.com');
+
+  Iterable<Chapter> get chaptersFromCurrentSource => isLinovelib
+      ? chapters.where(
+          (chapter) => linovelibChapterBelongsToBook(link, chapter.url),
+        )
+      : chapters;
 
   /// Number of unread chapters, excluding chapters from scanlators the user has
   /// filtered out for this manga. Mirrors the chapter list's scanlator filter,
@@ -69,16 +77,18 @@ extension MangaExtensions on Manga {
         .firstOrNull
         ?.scanlators;
     if (filter == null || filter.isEmpty) {
-      return chapters.where((c) => !(c.isRead ?? false)).length;
+      return chaptersFromCurrentSource
+          .where((c) => !(c.isRead ?? false))
+          .length;
     }
-    return chapters
+    return chaptersFromCurrentSource
         .where((c) => !(c.isRead ?? false) && !filter.contains(c.scanlator))
         .length;
   }
 
   /// Every chapter, by chapter number.
   List<Chapter> _chaptersByNumber() {
-    final data = chapters.toList();
+    final data = chaptersFromCurrentSource.toList();
     final sortKeys = _chapterSortKeys(name ?? '', data);
     // List.sort isn't stable, so chapters tying at the same key (notably
     // every unrecognized-number chapter, which falls back to 0) would
@@ -173,7 +183,10 @@ extension MangaExtensions on Manga {
 
     switch (sortIndex) {
       case 0: // by scanlator, then chapter number
-        final sortKeys = _chapterSortKeys(name ?? '', chapters.toList());
+        final sortKeys = _chapterSortKeys(
+          name ?? '',
+          chaptersFromCurrentSource.toList(),
+        );
         // Same stability concern as getFilteredChapters: break remaining
         // ties by list's current (already deterministic) order.
         final originalIndex = {

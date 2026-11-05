@@ -163,7 +163,9 @@ class _MangaDetailViewState extends ConsumerState<MangaDetailView>
           return ErrorState(detail: error.toString());
         },
         loading: () {
-          return _buildWidget(chapters: widget.manga!.chapters.toList());
+          return _buildWidget(
+            chapters: widget.manga!.chaptersFromCurrentSource.toList(),
+          );
         },
       ),
     );
