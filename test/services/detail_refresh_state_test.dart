@@ -35,6 +35,7 @@ import 'package:mangayomi/services/downloaded_chapter.dart';
 import 'package:mangayomi/utils/reg_exp_matcher.dart';
 import 'package:mangayomi/utils/extensions/manga_extensions.dart';
 import 'package:mangayomi/utils/linovelib_chapters.dart';
+import 'package:mangayomi/modules/manga/detail/widgets/read_action.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 
@@ -433,6 +434,15 @@ void main() {
           db.chapters.putSync(chapter);
           chapter.manga.saveSync();
         }
+        final history = History(
+          id: 30,
+          mangaId: 1,
+          chapterId: 10,
+          itemType: ItemType.novel,
+          date: '1000',
+        )..chapter.value = rows.first;
+        db.historys.putSync(history);
+        history.chapter.saveSync();
       });
       final work = db.mangas.getSync(1)!;
       work.chapters.loadSync();
@@ -442,6 +452,8 @@ void main() {
       expect(db.chapters.countSync(), 3);
       expect(db.chapters.getSync(10)?.lastPageRead, '17');
       expect(db.chapters.getSync(10)?.isBookmarked, true);
+      expect(resumeChapterFor(work, incognito: false), isNull);
+      expect(firstUnreadChapterFor(work)?.id, 11);
     },
   );
 

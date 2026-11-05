@@ -8,6 +8,7 @@ import 'package:mangayomi/providers/l10n_providers.dart';
 import 'package:mangayomi/repositories/history_repository.dart';
 import 'package:mangayomi/utils/extensions/chapter_extensions.dart';
 import 'package:mangayomi/utils/extensions/manga_extensions.dart';
+import 'package:mangayomi/utils/linovelib_chapters.dart';
 import 'package:shiori/shiori.dart';
 
 /// The chapter the reader last opened in [manga], or null when there is
@@ -17,7 +18,12 @@ Chapter? resumeChapterFor(Manga manga, {required bool incognito}) {
   final history = historyRepository.findByMangaId(manga.id!);
   if (history == null) return null;
   if (!history.chapter.isLoaded) history.chapter.loadSync();
-  return history.chapter.value;
+  final chapter = history.chapter.value;
+  if (manga.isLinovelib &&
+      !linovelibChapterBelongsToBook(manga.link, chapter?.url)) {
+    return null;
+  }
+  return chapter;
 }
 
 /// The chapter to open when there is no history: the first unread one in
@@ -42,7 +48,7 @@ class ReadActionButton extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     if (ref.watch(isLongPressedStateProvider)) return const SizedBox.shrink();
-    final chapters = manga.chapters.toList();
+    final chapters = manga.chaptersFromCurrentSource.toList();
     if (chapters.isEmpty) return const SizedBox.shrink();
     final l10n = context.l10n;
     final resume = resumeChapterFor(
@@ -66,9 +72,9 @@ class ReadActionButton extends ConsumerWidget {
         expand: true,
         icon: Symbols.play_arrow_rounded,
         label: resume != null
-            ? '${l10n.resume} · ${resume.name}'
+            ? '${l10n.resume} · ${resume.displayName}'
             : next != null && anyRead && !(next.isRead ?? false)
-            ? '${l10n.continue_reading} · ${next.name}'
+            ? '${l10n.continue_reading} · ${next.displayName}'
             : start,
         onPressed: () =>
             (resume ?? next ?? chapters.first).pushToReaderView(context),
