@@ -313,6 +313,72 @@ void main() {
     },
   );
 
+  test('Linovelib refresh relabels every retained downloaded copy', () async {
+    const url = 'https://tw.linovelib.com/novel/2013/72237.html';
+    const otherUrl = 'https://tw.linovelib.com/novel/2013/122428.html';
+    const currentName = '0243 | 第十五卷 第二話';
+    const otherName = '0263 | 第十六卷 第七話';
+    db.writeTxnSync(() {
+      db.sources.putSync(db.sources.getSync(1)!..itemType = ItemType.novel);
+      final work = db.mangas.getSync(1)!
+        ..itemType = ItemType.novel
+        ..link = 'https://tw.linovelib.com/novel/2013.html';
+      db.mangas.putSync(work);
+      final copies = [
+        db.chapters.getSync(10)!
+          ..name = '0263 | 第十五卷 第二話'
+          ..url = url,
+        Chapter(id: 11, mangaId: 1, name: '0263｜第十五卷 第二話', url: url),
+        Chapter(id: 12, mangaId: 1, name: otherName, url: otherUrl),
+      ];
+      for (final chapter in copies) {
+        chapter.manga.value = work;
+        db.chapters.putSync(chapter);
+        chapter.manga.saveSync();
+      }
+      for (final id in [10, 11]) {
+        db.downloads.putSync(
+          Download(
+            id: id,
+            isDownload: true,
+            isStartDownload: false,
+            succeeded: 1,
+            failed: 0,
+            total: 1,
+          ),
+        );
+      }
+    });
+    final container = ProviderContainer(
+      overrides: [
+        getDetailProvider.overrideWith(
+          (ref, args) async => MManga(
+            chapters: [
+              MChapter(name: otherName, url: otherUrl),
+              MChapter(name: currentName, url: url),
+            ],
+          ),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+    await container.read(
+      updateMangaDetailProvider(
+        mangaId: 1,
+        isInit: false,
+        showToast: false,
+      ).future,
+    );
+    expect(db.chapters.countSync(), 3);
+    expect(db.chapters.getSync(10)?.displayName, currentName);
+    expect(db.chapters.getSync(11)?.displayName, currentName);
+    expect(db.chapters.getSync(10)?.name, '0263 | 第十五卷 第二話');
+    expect(db.chapters.getSync(11)?.name, '0263｜第十五卷 第二話');
+    final work = db.mangas.getSync(1)!;
+    work.chapters.loadSync();
+    expect(work.getChapterListForReading().map((c) => c.url), [url, otherUrl]);
+  });
+
   test('duplicate labels merge references and leave one chapter', () async {
     db.writeTxnSync(() {
       final original = db.chapters.getSync(10)!

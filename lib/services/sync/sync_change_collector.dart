@@ -287,7 +287,7 @@ Map<String, dynamic>? _chapterToWire(Chapter c, {int? forcedUpdatedAt}) {
   return {
     'clientId': c.clientId,
     'mangaClientId': mangaClientId,
-    'name': c.name,
+    'name': c.displayName,
     'url': c.url,
     'scanlator': c.scanlator,
     'dateUpload': int.tryParse(c.dateUpload ?? ''),

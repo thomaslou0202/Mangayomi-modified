@@ -46,7 +46,7 @@ mixin ChapterControllerMixin {
 
   String getMangaName() => getManga().name!;
   String getSourceName() => getManga().source!;
-  String getChapterTitle() => chapter.name!;
+  String getChapterTitle() => chapter.displayName!;
 
   // ---------------------------------------------------------------------------
   // Chapter / episode navigation

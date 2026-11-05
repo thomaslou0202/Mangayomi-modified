@@ -283,6 +283,24 @@ Future<dynamic> updateMangaDetail(
         }
       }
 
+      if (!matchByName) {
+        // Separate downloaded copies can retain their own storage names and
+        // IDs. Refresh the label of every copy, not just the URL's survivor.
+        final namesByUrl = {
+          for (final chap in chaps)
+            if (chap.url?.trim().isNotEmpty == true && chap.name != null)
+              chap.url!.trim().getUrlWithoutDomain: chap.name!,
+        };
+        for (final chapter in existingChapters) {
+          final name = namesByUrl[chapter.url?.trim().getUrlWithoutDomain];
+          if (name == null || chapter.displayName == name) continue;
+          chapter
+            ..catalogName = name
+            ..updatedAt = now;
+          chaptersToUpdate.add(chapter);
+        }
+      }
+
       if (chaptersToUpdate.isNotEmpty) {
         await chapterRepository.putAllAsync(chaptersToUpdate);
       }

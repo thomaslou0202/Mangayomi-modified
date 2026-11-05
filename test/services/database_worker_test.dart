@@ -219,6 +219,73 @@ void main() {
     },
   );
 
+  test('Linovelib sync sends the catalogue label and preserves local storage names', () async {
+    const url = 'https://tw.linovelib.com/novel/2013/72237.html';
+    const oldName = '0263 | 第十五卷 第二話';
+    const currentName = '0243 | 第十五卷 第二話';
+    await app.isar.writeTxn(() async {
+      await app.isar.mangas.put(
+        book(1)
+          ..itemType = ItemType.novel
+          ..link = 'https://tw.linovelib.com/novel/2013.html',
+      );
+      await app.isar.chapters.put(
+        Chapter(
+          id: 1,
+          clientId: 88,
+          mangaId: 1,
+          name: oldName,
+          url: url,
+          catalogName: currentName,
+          updatedAt: 10,
+        ),
+      );
+    });
+    final snapshot = await DatabaseWorker.instance.run<ChangedRows>(
+      'collect',
+      0,
+    );
+    expect(snapshot.chapters.single['name'], currentName);
+    await DatabaseWorker.instance.run<bool>('apply', {
+      'chapters': [
+        {
+          'clientId': 88,
+          'mangaClientId': 100001,
+          'name': oldName,
+          'url': url,
+          'updatedAt': 20,
+          'lastPageRead': '17',
+          'isRead': true,
+        },
+      ],
+    });
+    var chapter = (await app.isar.chapters.get(1))!;
+    expect(chapter.name, oldName);
+    expect(chapter.displayName, currentName);
+    expect(chapter.lastPageRead, '17');
+    expect(chapter.isRead, true);
+
+    await app.isar.writeTxn(
+      () => app.isar.chapters.put(chapter..catalogName = null),
+    );
+    await DatabaseWorker.instance.run<bool>('apply', {
+      'chapters': [
+        {
+          'clientId': 88,
+          'mangaClientId': 100001,
+          'name': currentName,
+          'url': url,
+          'updatedAt': 30,
+          'lastPageRead': '17',
+          'isRead': true,
+        },
+      ],
+    });
+    chapter = (await app.isar.chapters.get(1))!;
+    expect(chapter.name, oldName);
+    expect(chapter.displayName, currentName);
+  });
+
   test(
     'new client IDs remain uploadable and do not reset reader progress',
     () async {

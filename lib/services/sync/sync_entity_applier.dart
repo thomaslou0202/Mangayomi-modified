@@ -24,6 +24,8 @@ import 'package:mangayomi/repositories/settings_repository.dart';
 import 'package:mangayomi/repositories/track_repository.dart';
 import 'package:mangayomi/repositories/update_repository.dart';
 import 'package:mangayomi/services/sync/sync_wire_types.dart';
+import 'package:mangayomi/utils/extensions/manga_extensions.dart';
+import 'package:mangayomi/utils/extensions/string_extensions.dart';
 
 class SyncEntityApplier {
   const SyncEntityApplier();
@@ -193,10 +195,22 @@ class SyncEntityApplier {
     final chapter =
         existing ??
         Chapter(mangaId: mangaLocal.id, name: wire['name'] as String?);
+    final preserveCatalog =
+        existing != null &&
+        mangaLocal.isLinovelib &&
+        existing.url?.trim().isNotEmpty == true &&
+        existing.url?.trim().getUrlWithoutDomain ==
+            (wire['url'] as String?)?.trim().getUrlWithoutDomain;
+    final incomingName = wire['name'] as String?;
+    if (preserveCatalog && chapter.catalogName == null) {
+      chapter.catalogName = incomingName;
+    } else if (!preserveCatalog) {
+      chapter.catalogName = null;
+    }
     chapter
       ..clientId = clientId
       ..mangaId = mangaLocal.id
-      ..name = wire['name'] as String?
+      ..name = preserveCatalog ? chapter.name : incomingName
       ..url = wire['url'] as String?
       ..scanlator = wire['scanlator'] as String?
       ..dateUpload = (wire['dateUpload'] as int?)?.toString() ?? ''
