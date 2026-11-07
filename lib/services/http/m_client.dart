@@ -1,9 +1,11 @@
 import 'dart:ui' show Size;
 
 import 'package:mangayomi/services/http/webview_request_profile.dart';
+import 'package:mangayomi/services/http/linovelib_browser_profile.dart';
 import 'package:mangayomi/services/http/foreground_novel_webview.dart';
 
 import 'dart:convert';
+import 'dart:collection';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -763,13 +765,31 @@ Future<void> _evaluateJavascriptViaWebview(HttpRequest request) async {
     flutter_inappwebview.HeadlessInAppWebView? headlessWebView;
     try {
       final profile = WebviewRequestProfile(headers);
+      final emulatePhone =
+          Platform.isWindows &&
+          LinovelibBrowserProfile.supports(url, profile.userAgent);
+      final pageRequest = flutter_inappwebview.URLRequest(
+        url: flutter_inappwebview.WebUri(url),
+        headers: headers,
+      );
       headlessWebView = flutter_inappwebview.HeadlessInAppWebView(
         initialSize: Size(profile.width, profile.height),
         initialSettings: flutter_inappwebview.InAppWebViewSettings(
           userAgent: profile.userAgent,
         ),
         webViewEnvironment: webViewEnvironment,
-        onWebViewCreated: (controller) {
+        initialUserScripts: emulatePhone
+            ? UnmodifiableListView([
+                flutter_inappwebview.UserScript(
+                  source: LinovelibBrowserProfile.captureAtDomReady(scripts),
+                  injectionTime: flutter_inappwebview
+                      .UserScriptInjectionTime
+                      .AT_DOCUMENT_START,
+                  forMainFrameOnly: true,
+                ),
+              ])
+            : null,
+        onWebViewCreated: (controller) async {
           controller.addJavaScriptHandler(
             handlerName: 'setResponse',
             callback: (args) {
@@ -777,11 +797,30 @@ Future<void> _evaluateJavascriptViaWebview(HttpRequest request) async {
               isOk = true;
             },
           );
+          if (emulatePhone) {
+            try {
+              await controller.callDevToolsProtocolMethod(
+                methodName: 'Emulation.setUserAgentOverride',
+                parameters: LinovelibBrowserProfile.userAgentOverride(
+                  profile.userAgent!,
+                ),
+              );
+              await controller.callDevToolsProtocolMethod(
+                methodName: 'Emulation.setDeviceMetricsOverride',
+                parameters: LinovelibBrowserProfile.metrics,
+              );
+              await controller.callDevToolsProtocolMethod(
+                methodName: 'Emulation.setTouchEmulationEnabled',
+                parameters: {'enabled': true, 'maxTouchPoints': 5},
+              );
+              await controller.loadUrl(urlRequest: pageRequest);
+            } catch (_) {
+              response = LinovelibBrowserProfile.unsupported(url);
+              isOk = true;
+            }
+          }
         },
-        initialUrlRequest: flutter_inappwebview.URLRequest(
-          url: flutter_inappwebview.WebUri(url),
-          headers: headers,
-        ),
+        initialUrlRequest: emulatePhone ? null : pageRequest,
         onLoadStop: (controller, url) async {
           for (var script in scripts) {
             await controller.platform.evaluateJavascript(source: script);
