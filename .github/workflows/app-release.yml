@@ -1,15 +1,11 @@
-name: Release custom Mangayomi
-
+name: Test Windows Linovelib phone profile
 on:
   workflow_dispatch:
-
 permissions:
   contents: read
-
 concurrency:
-  group: custom-app-release
-  cancel-in-progress: false
-
+  group: linovelib-windows-preview
+  cancel-in-progress: true
 jobs:
   prepare:
     runs-on: ubuntu-latest
@@ -18,19 +14,12 @@ jobs:
       version: ${{ steps.config.outputs.version }}
       build: ${{ steps.config.outputs.build }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - id: config
         run: |
-          python3 - <<'PY'
-          import json, os, re
-          c = json.load(open('app-release.json'))
-          assert re.fullmatch(r'[0-9a-f]{40}', c['source'])
-          assert re.fullmatch(r'\d+\.\d+\.\d+', c['version'])
-          assert isinstance(c['build'], int) and c['build'] > 131
-          assert c['tag'] == 'v'+c['version']+'+'+str(c['build'])
-          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-              for key in ['source', 'version', 'build']: f.write(f'{key}={c[key]}\n')
-          PY
+          echo "source=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+          echo "version=0.9.95" >> "$GITHUB_OUTPUT"
+          echo "build=142" >> "$GITHUB_OUTPUT"
+
   windows:
     needs: prepare
     runs-on: windows-latest
@@ -101,6 +90,7 @@ jobs:
           test/modules/novel_content_test.dart
           test/modules/manga/reader/reader_leading_boundary_test.dart
           test/modules/manga/reader/reader_pages_test.dart
+          test/services/linovelib_browser_profile_test.dart
           test/services/webview_request_profile_test.dart
           test/services/detail_refresh_state_test.dart
           test/modules/novel_illustration_test.dart
@@ -119,206 +109,14 @@ jobs:
           $version = (Get-Item app/build/windows/x64/runner/Release/mangayomi.exe).VersionInfo.ProductVersion
           if ($version -ne $expected) { throw "Windows product version '$version' does not match '$expected'" }
           New-Item -ItemType Directory -Path dist
-          Copy-Item patches/release-support/RELEASE-NOTES.md app/build/windows/x64/runner/Release/INSTALL-zh-TW.md
+          Copy-Item patches/release-support/WINDOWS-READER-PREVIEW.md app/build/windows/x64/runner/Release/INSTALL-zh-TW.md
           Copy-Item app/LICENSE app/build/windows/x64/runner/Release/LICENSE.Mangayomi.txt
           Compress-Archive -Path app/build/windows/x64/runner/Release/* -DestinationPath dist/Mangayomi-windows.zip
           Get-FileHash dist/Mangayomi-windows.zip -Algorithm SHA256 | Format-List
       - name: Upload Windows release
         uses: actions/upload-artifact@v4
         with:
-          name: Mangayomi-windows
+          name: Mangayomi-windows-preview-142
           path: dist/Mangayomi-windows.zip
           if-no-files-found: error
           retention-days: 14
-  android:
-    needs: prepare
-    runs-on: ubuntu-latest
-    timeout-minutes: 90
-    env:
-      CARGO_BUILD_JOBS: 3
-      JAVA_OPTS: -Xmx4096m -XX:MaxMetaspaceSize=512m
-      GRADLE_OPTS: -Xmx4096m -XX:MaxMetaspaceSize=512m
-    steps:
-      - name: Check out patch repository
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-        with:
-          path: patches
-      - name: Check out matching upstream Mangayomi source
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-        with:
-          repository: ${{ github.repository }}
-          ref: ${{ needs.prepare.outputs.source }}
-          path: app
-      - name: Install native build tools
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y clang ninja-build libjpeg-dev libpng-dev libavif-dev
-      - name: Set up Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: 3.47.9
-          channel: stable
-          cache: true
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
-      - name: Cache Rust compilation
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: app/rust
-          cache-on-failure: true
-      - name: Set up Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          packages: platform-tools
-      - name: Install Android platform tools
-        run: |
-          sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358' 'cmake;3.22.1'
-          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
-      - name: Set up CMake
-        uses: jwlawson/actions-setup-cmake@v2
-        with:
-          cmake-version: 3.18.1
-      - name: Install locked dependencies
-        working-directory: app
-        run: flutter pub get --enforce-lockfile
-      - name: Generate complete Traditional Chinese localization
-        working-directory: app
-        run: flutter gen-l10n
-      - name: Analyze custom app changes
-        working-directory: app
-        run: dart analyze
-      - name: Set up Node for source comment DOM tests
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: patches/package-lock.json
-      - name: Test source website comment location
-        working-directory: patches
-        shell: bash
-        run: |
-          npm ci --ignore-scripts --no-audit --no-fund
-          dart ../app/tool/export_comments_script.dart comments-focus.js
-          node --test release-support/comments-locator.test.cjs
-      - name: Run release regression tests
-        working-directory: app
-        run: >-
-          flutter test --no-pub --concurrency=1
-          test/modules/manga/detail/comments_test.dart
-          test/modules/manga/detail/detail_action_strip_test.dart
-          test/modules/manga/detail/comments_navigation_test.dart
-          test/modules/manga/detail/update_manga_detail_lifecycle_test.dart
-          test/modules/about/app_release_test.dart
-          test/modules/browse/source_metadata_test.dart
-          test/services/database_worker_test.dart
-          test/services/library_chapter_summary_test.dart
-          test/services/sync_oauth_callback_test.dart
-          test/services/sync_background_transport_test.dart
-          test/services/sync_checkpoint_test.dart
-          test/modules/library/library_unread_sort_test.dart
-          test/repositories/manga_repository_test.dart
-          test/modules/more/data_and_storage/restore_replace_test.dart
-          test/settings/settings_clobber_test.dart
-          test/modules/novel_continuous_reader_test.dart
-          test/modules/novel_content_test.dart
-          test/modules/manga/reader/reader_leading_boundary_test.dart
-          test/modules/manga/reader/reader_pages_test.dart
-          test/services/webview_request_profile_test.dart
-          test/services/detail_refresh_state_test.dart
-          test/modules/novel_illustration_test.dart
-          test/modules/novel_inline_html_test.dart
-          test/modules/novel_double_page_test.dart
-          test/modules/novel_ref_after_dispose_test.dart
-          test/l10n/traditional_chinese_test.dart
-          test/l10n/episode_count_test.dart
-      - name: Prepare dedicated release signing key
-        working-directory: app
-        env:
-          SIGNING_KEYSTORE: ${{ secrets.MANGAYOMI_ILLUSTRATIONS_KEYSTORE_BASE64 }}
-          SIGNING_PASSWORD: ${{ secrets.MANGAYOMI_ILLUSTRATIONS_KEYSTORE_PASSWORD }}
-        run: |
-          python3 - <<'PY'
-          import base64, os
-          from pathlib import Path
-          key = os.environ['SIGNING_KEYSTORE']
-          password = os.environ['SIGNING_PASSWORD']
-          if not key or not password:
-              raise SystemExit('Dedicated Android signing secrets are not configured')
-          Path('android/app/illustrations-release.p12').write_bytes(base64.b64decode(key))
-          Path('android/key.properties').write_text('storePassword='+password+'\nkeyPassword='+password+'\nkeyAlias=illustrations\nstoreFile=illustrations-release.p12\n')
-          PY
-      - name: Build universal signed Android APK
-        working-directory: app
-        run: flutter build apk --release --no-pub --build-name=${{ needs.prepare.outputs.version }} --build-number=${{ needs.prepare.outputs.build }}
-      - name: Verify and package Android APK
-        run: |
-          mkdir -p dist
-          cp app/build/app/outputs/flutter-apk/app-release.apk dist/Mangayomi-android.apk
-          cp patches/release-support/RELEASE-NOTES.md dist/INSTALL-zh-TW.md
-          cp app/LICENSE dist/LICENSE.Mangayomi.txt
-          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs dist/Mangayomi-android.apk > dist/signature-verification.txt
-          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging dist/Mangayomi-android.apk > dist/apk-metadata.txt
-          python3 - <<'PY'
-          import hashlib, pathlib, re
-          cert = hashlib.sha256(pathlib.Path('patches/release-support/android-signing-certificate.der').read_bytes()).hexdigest()
-          sig = pathlib.Path('dist/signature-verification.txt').read_text()
-          assert cert in re.findall(r'certificate SHA-256 digest: ([0-9a-f]+)', sig), 'APK signing identity changed'
-          PY
-          sha256sum dist/*.apk | tee dist/SHA256SUMS.txt
-          cd app/android && ./gradlew --stop
-      - name: Enable emulator acceleration
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-      - name: Install and launch on Android emulator
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 35
-          arch: x86_64
-          target: google_apis
-          profile: pixel_6
-          disable-animations: true
-          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
-          script: bash patches/release-support/android-smoke.sh
-      - name: Remove temporary signing files
-        if: always()
-        working-directory: app
-        run: rm -f android/app/illustrations-release.p12 android/key.properties
-      - name: Upload Android build and verification
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: Mangayomi-android
-          path: dist/
-          if-no-files-found: error
-          retention-days: 14
-
-  publish:
-    needs: [prepare, windows, android]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-      - uses: actions/download-artifact@v4
-        with:
-          name: Mangayomi-windows
-          path: dist/windows
-      - uses: actions/download-artifact@v4
-        with:
-          name: Mangayomi-android
-          path: dist/android
-      - name: Test release publication safeguards
-        run: python3 -m unittest discover -s tests -p test_app_release_publish.py
-      - name: Publish both tested platforms as the latest stable release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: python3 scripts/publish-app-release.py
