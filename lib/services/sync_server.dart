@@ -52,17 +52,20 @@ const _desktopOAuthCallbackPort = 48765;
 /// server catches it on Windows and Linux, the app's own scheme everywhere
 /// else. flutter_web_auth_2 takes a loopback address only on Windows and
 /// Linux; macOS, counted as a desktop here, rejected it as a scheme (#1062).
-/// The trackers already split it this way.
-({String redirectUri, String callbackUrlScheme}) syncOAuthCallback({
-  required bool loopback,
-}) => loopback
+/// The desktop HTTP callback must use the plugin's loopback-server flow;
+/// its WebView flow only intercepts plain schemes and never binds a server.
+/// Use the same IPv4 literal as that listener to avoid localhost resolving to ::1.
+({String redirectUri, String callbackUrlScheme, bool useWebview})
+syncOAuthCallback({required bool loopback}) => loopback
     ? (
-        redirectUri: 'http://localhost:$_desktopOAuthCallbackPort/callback',
-        callbackUrlScheme: 'http://localhost:$_desktopOAuthCallbackPort',
+        redirectUri: 'http://127.0.0.1:$_desktopOAuthCallbackPort/callback',
+        callbackUrlScheme: 'http://127.0.0.1:$_desktopOAuthCallbackPort',
+        useWebview: false,
       )
     : (
         redirectUri: 'mangayomi://oauth-callback',
         callbackUrlScheme: 'mangayomi',
+        useWebview: true,
       );
 
 @riverpod
@@ -92,7 +95,7 @@ class SyncServer extends _$SyncServer {
       final verifier = _generatePkceVerifier();
       final challenge = _codeChallengeFromVerifier(verifier);
       final state = _generatePkceVerifier();
-      final (:redirectUri, :callbackUrlScheme) = syncOAuthCallback(
+      final (:redirectUri, :callbackUrlScheme, :useWebview) = syncOAuthCallback(
         loopback: Platform.isWindows || Platform.isLinux,
       );
 
@@ -109,6 +112,7 @@ class SyncServer extends _$SyncServer {
         authorizeUrl.toString(),
         port: _desktopOAuthCallbackPort,
         callbackUrlScheme: callbackUrlScheme,
+        useWebview: useWebview,
       );
       final resultParams = resultUri?.queryParameters ?? const {};
       final code = resultParams['code'];

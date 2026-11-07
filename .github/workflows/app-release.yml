@@ -90,6 +90,7 @@ jobs:
           test/modules/browse/source_metadata_test.dart
           test/services/database_worker_test.dart
           test/services/library_chapter_summary_test.dart
+          test/services/sync_oauth_callback_test.dart
           test/services/sync_background_transport_test.dart
           test/services/sync_checkpoint_test.dart
           test/modules/library/library_unread_sort_test.dart
@@ -218,6 +219,7 @@ jobs:
           test/modules/browse/source_metadata_test.dart
           test/services/database_worker_test.dart
           test/services/library_chapter_summary_test.dart
+          test/services/sync_oauth_callback_test.dart
           test/services/sync_background_transport_test.dart
           test/services/sync_checkpoint_test.dart
           test/modules/library/library_unread_sort_test.dart

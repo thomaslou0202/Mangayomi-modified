@@ -162,16 +162,29 @@ class ExternalBrowser {
     String authUrl, {
     required int port,
     required String callbackUrlScheme,
+    bool useWebview = true,
   }) {
     if (Platform.isLinux) return _openOAuthLinux(authUrl, port: port);
     // TODO(platforms): implement the macOS and Windows chosen-browser login.
     if (Platform.isMacOS) {
-      return _openOAuthDefault(authUrl, callbackUrlScheme: callbackUrlScheme);
+      return _openOAuthDefault(
+        authUrl,
+        callbackUrlScheme: callbackUrlScheme,
+        useWebview: useWebview,
+      );
     }
     if (Platform.isWindows) {
-      return _openOAuthDefault(authUrl, callbackUrlScheme: callbackUrlScheme);
+      return _openOAuthDefault(
+        authUrl,
+        callbackUrlScheme: callbackUrlScheme,
+        useWebview: useWebview,
+      );
     }
-    return _openOAuthDefault(authUrl, callbackUrlScheme: callbackUrlScheme);
+    return _openOAuthDefault(
+      authUrl,
+      callbackUrlScheme: callbackUrlScheme,
+      useWebview: useWebview,
+    );
   }
 
   /// Linux: open the authorize page in the chosen browser and catch the
@@ -225,11 +238,13 @@ class ExternalBrowser {
   static Future<Uri?> _openOAuthDefault(
     String authUrl, {
     required String callbackUrlScheme,
+    required bool useWebview,
   }) async {
     return Uri.parse(
       await FlutterWebAuth2.authenticate(
         url: authUrl,
         callbackUrlScheme: callbackUrlScheme,
+        options: FlutterWebAuth2Options(useWebview: useWebview),
       ),
     );
   }
