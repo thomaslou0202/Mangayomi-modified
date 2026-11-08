@@ -65,6 +65,14 @@ void main() {
     'a failed page leaves cached files and reading progress intact',
     (tester) => _runDownloadTest(tester, 1, failPages: true),
   );
+  testWidgets(
+    'novel downloads use the extension without probing the inaccessible chapter URL',
+    (tester) => _runDownloadTest(tester, 0, novel: true),
+  );
+  testWidgets(
+    'novel source errors become failed queue entries instead of completed error pages',
+    (tester) => _runDownloadTest(tester, 0, novel: true, failPages: true),
+  );
 }
 
 Future<void> _runDownloadTest(
@@ -73,6 +81,7 @@ Future<void> _runDownloadTest(
   bool stalledCover = false,
   bool holdPacking = false,
   bool failPages = false,
+  bool novel = false,
 }) async {
   await tester.pumpWidget(
     MaterialApp(builder: BotToastInit(), home: const SizedBox()),
@@ -85,6 +94,7 @@ Future<void> _runDownloadTest(
         stalledCover: stalledCover,
         holdPacking: holdPacking,
         failPages: failPages,
+        novel: novel,
       ),
     );
   } finally {
@@ -98,6 +108,7 @@ Future<void> _checkDownload(
   bool stalledCover = false,
   bool holdPacking = false,
   bool failPages = false,
+  bool novel = false,
 }) async {
   final directory = await Directory.systemTemp.createTemp('chapter-download-');
   addTearDown(() => directory.delete(recursive: true));
@@ -160,9 +171,26 @@ Future<void> _checkDownload(
         ..saveAsCBZArchive = true
         ..chapterPageIndexList = [ChapterPageIndex(chapterId: 1, index: 6)],
     );
+    if (novel) {
+      db.sources.putSync(
+        Source()
+          ..id = 1
+          ..name = 'test'
+          ..lang = 'en'
+          ..baseUrl = 'http://127.0.0.1:1'
+          ..isAdded = true
+          ..isActive = true
+          ..itemType = ItemType.novel
+          ..sourceCodeLanguage = SourceCodeLanguage.javascript
+          ..sourceCode = (failPages
+              ? 'class DefaultExtension extends MProvider { async getHtmlContent() { throw new Error("source unavailable"); } }'
+              : 'class DefaultExtension extends MProvider { async getHtmlContent() { return "<p>First paragraph</p><p>Last paragraph</p>"; } }'),
+      );
+    }
     final manga = Manga(
       id: 1,
       name: 'Fixture',
+      itemType: novel ? ItemType.novel : ItemType.manga,
       source: 'test',
       sourceId: 1,
       lang: 'en',
@@ -201,7 +229,7 @@ Future<void> _checkDownload(
       directory.path,
       'Mangayomi',
       'downloads',
-      'Manga',
+      novel ? 'Novel' : 'Manga',
       'test (EN)',
       'Fixture',
     ),
@@ -267,6 +295,19 @@ Future<void> _checkDownload(
   await download.timeout(const Duration(seconds: 10));
   // Completion must include packing and persistence; no post-download polling.
   expect(db.downloads.getSync(1)?.isDownload, !failPages);
+  if (novel) {
+    final html = File(p.join(pagesDirectory.path, 'Chapter 1.html'));
+    expect(await html.exists(), !failPages);
+    if (!failPages) {
+      expect(
+        jsonDecode(await html.readAsString()),
+        '<p>First paragraph</p><p>Last paragraph</p>',
+      );
+    }
+    expect(imageRequests, 0);
+    expect(db.chapters.getSync(1)!.lastPageRead, '7');
+    return;
+  }
   if (stalledCover) {
     // Done while the cover still hangs: a page stands in for it...
     final cover = File(p.join(mangaDirectory.path, 'cover.png'));

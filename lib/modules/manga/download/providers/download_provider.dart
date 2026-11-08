@@ -27,6 +27,7 @@ import 'package:mangayomi/services/get_video_list.dart';
 import 'package:mangayomi/services/chapter_cache.dart';
 import 'package:mangayomi/services/get_chapter_pages.dart';
 import 'package:mangayomi/services/http/m_client.dart';
+import 'package:mangayomi/services/download_manager/novel_download.dart';
 import 'package:mangayomi/services/download_manager/m3u8/m3u8_downloader.dart';
 import 'package:mangayomi/services/download_manager/m3u8/models/download.dart';
 import 'package:mangayomi/utils/chapter_recognition.dart';
@@ -102,12 +103,7 @@ Future<void> downloadChapter(
       keepAlive.close();
       return;
     }
-    final http = MClient.init(
-      reqcopyWith: {'useDartHttpClient': true, 'followRedirects': false},
-    );
-
     List<PageUrl> pageUrls = [];
-    PageUrl? novelPage;
     List<PageUrl> pages = [];
     final StorageProvider storageProvider = StorageProvider();
     await storageProvider.requestPermission();
@@ -347,29 +343,11 @@ Future<void> downloadChapter(
           .catchError((Object e) {
             startFailure = "Failed to load the video list: $e";
           });
-    } else if (itemType == ItemType.novel && chapter.url != null) {
-      final manga = chapter.manga.value!;
-      final source = getSource(
-        manga.lang!,
-        manga.source!,
-        manga.sourceId,
-        installedOnly: true,
-      )!;
-      final chapterUrl = "${source.baseUrl}${chapter.url!.getUrlWithoutDomain}";
-      final cookie = MClient.getCookiesPref(chapterUrl);
-      final headers = htmlHeader;
-      if (cookie.isNotEmpty) {
-        final userAgent = ref.read(userAgentStateProvider);
-        headers.addAll(cookie);
-        headers[HttpHeaders.userAgentHeader] = userAgent;
-      }
-      final res = await http.get(Uri.parse(chapterUrl), headers: headers);
-      if (res.headers.containsKey("Location")) {
-        novelPage = PageUrl(res.headers["Location"]!);
-      } else {
-        novelPage = PageUrl(chapterUrl);
-      }
-      isOk = true;
+    } else if (itemType == ItemType.novel) {
+      // The extension owns redirects, cookies and WebView-backed readers.
+      // A separate raw HTTP probe can fail even when getHtmlContent works.
+      isOk = chapter.url?.trim().isNotEmpty == true;
+      if (!isOk) startFailure = 'The chapter has no reading URL';
     }
 
     // Wait for the source to resolve pages/video — but never forever. Bail on
@@ -519,29 +497,25 @@ Future<void> downloadChapter(
       }
     } else if (itemType == ItemType.novel) {
       final file = File(p.join(chapterDirectory.path, "$chapterName.html"));
-      if (!file.existsSync() && novelPage != null) {
-        final source = getSource(
-          manga.lang!,
-          manga.source!,
-          manga.sourceId,
-          installedOnly: true,
-        )!;
-        p.join(chapterDirectory.path, "$chapterName.html");
-        final html = await withExtensionService(
+      final source = getSource(
+        manga.lang!,
+        manga.source!,
+        manga.sourceId,
+        installedOnly: true,
+      );
+      if (source == null) throw StateError('The novel source is not installed');
+      final proxy = ref.read(androidProxyServerStateProvider);
+      await saveNovelDownload(
+        file: file,
+        load: () => withExtensionService(
           source,
-          ref.read(androidProxyServerStateProvider),
-          (service) =>
-              service.getHtmlContent(chapter.manga.value!.name!, chapter.url!),
-        );
-        if (html.isNotEmpty) {
-          await file.writeAsString(html);
-          await setProgress(
-            DownloadProgress(1, 1, itemType, isCompleted: true),
-          );
-        }
-      } else {
-        await setProgress(DownloadProgress(1, 1, itemType, isCompleted: true));
-      }
+          proxy,
+          (service) => service.getHtmlContent(manga.name!, chapter.url!),
+        ),
+        isCancelled: () => isDownloadCancelled(chapter),
+      );
+      if (isDownloadCancelled(chapter)) return;
+      await setProgress(DownloadProgress(1, 1, itemType, isCompleted: true));
     } else if (hasM3U8File) {
       await m3u8Downloader?.download((progress) {
         progressWrites = progressWrites.then((_) => setProgress(progress));

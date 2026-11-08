@@ -193,11 +193,13 @@ var extention = new DefaultExtension();
   @override
   Future<String> getHtmlContent(String name, String url) async {
     _init();
-    final res = (await runtime.handlePromise(
-      await runtime.evaluateAsync(
-        'jsonStringify(() => extention.getHtmlContent(${jsonEncode(name)}, ${jsonEncode(url)}))',
-      ),
-    )).stringResult;
+    final evaluated = await runtime.evaluateAsync(
+      'jsonStringify(() => extention.getHtmlContent(${jsonEncode(name)}, ${jsonEncode(url)}))',
+    );
+    _throwIfError(evaluated, 'loading novel content');
+    final promised = await runtime.handlePromise(evaluated);
+    _throwIfError(promised, 'loading novel content');
+    final res = promised.stringResult;
     return res;
   }
 
