@@ -5,6 +5,7 @@ import 'package:mangayomi/models/chapter.dart';
 import 'package:mangayomi/models/history.dart';
 import 'package:mangayomi/models/manga.dart';
 import 'package:mangayomi/modules/history/providers/isar_providers.dart';
+import 'package:mangayomi/modules/library/providers/library_summary_provider.dart';
 import 'package:mangayomi/modules/library/widgets/library_entry_utils.dart';
 import 'package:mangayomi/providers/l10n_providers.dart';
 import 'package:mangayomi/repositories/chapter_repository.dart';
@@ -49,11 +50,15 @@ class ContinueEntry {
 ///
 /// [chapterById] and [mangaById] are resolved in one batch by the caller,
 /// so building the shelf costs two reads rather than two per row.
+///
+/// [progressOf] answers how far through a series is; by default it loads the
+/// series' chapters, which the shelf avoids by passing the library summary.
 List<ContinueEntry> continueEntries(
   List<History> history, {
   required Map<int, Chapter> chapterById,
   required Map<int, Manga> mangaById,
   int limit = 12,
+  double Function(Manga manga)? progressOf,
 }) {
   int when(History h) => int.tryParse(h.date ?? '') ?? 0;
   final sorted = [...history]..sort((a, b) => when(b).compareTo(when(a)));
@@ -64,19 +69,74 @@ List<ContinueEntry> continueEntries(
     final manga = mangaById[chapter?.mangaId ?? h.mangaId];
     if (chapter == null || manga == null || manga.id == null) continue;
     if (!(manga.favorite ?? false) || !seen.add(manga.id!)) continue;
-    final chapters = manga.chapters.toList();
-    final read = chapters.where((c) => c.isRead ?? false).length;
     out.add(
       ContinueEntry(
         manga: manga,
         chapter: chapter,
-        progress: chapters.isEmpty ? 0 : read / chapters.length,
+        progress: progressOf?.call(manga) ?? _progressFromChapters(manga),
       ),
     );
     if (out.length == limit) break;
   }
   return out;
 }
+
+double _progressFromChapters(Manga manga) {
+  final chapters = manga.chapters.toList();
+  final read = chapters.where((c) => c.isRead ?? false).length;
+  return chapters.isEmpty ? 0 : read / chapters.length;
+}
+
+/// How many of the most recent history rows the shelf looks at. Enough to
+/// fill it many times over; reading every row ever recorded is not.
+const _historyWindow = 200;
+
+/// The shelf's entries for one media, worked out off the build.
+///
+/// The shelf used to read every history row's chapter and manga
+/// synchronously, then load each series' whole chapter list for its progress
+/// bar, every time the library rebuilt. Now the recent rows are read
+/// asynchronously and progress comes from the library summary, which the
+/// library already keeps in the background.
+final continueEntriesProvider = FutureProvider.autoDispose
+    .family<List<ContinueEntry>, ItemType>((ref, itemType) async {
+      final rows = await ref.watch(
+        getAllHistoryStreamProvider(itemType: itemType).future,
+      );
+      final summaries = ref.watch(librarySummaryProvider).asData?.value;
+      int when(History h) => int.tryParse(h.date ?? '') ?? 0;
+      final recent = ([...rows]..sort((a, b) => when(b).compareTo(when(a))))
+          .take(_historyWindow)
+          .toList();
+      final chapterIds = recent.map((h) => h.chapterId).nonNulls.toList();
+      final chapterById = {
+        for (final c in (await chapterRepository.getAllByIdsAsync(
+          chapterIds,
+        )).nonNulls)
+          c.id!: c,
+      };
+      final mangaIds = chapterById.values
+          .map((c) => c.mangaId)
+          .nonNulls
+          .toSet()
+          .toList();
+      final mangaById = {
+        for (final m in (await mangaRepository.getAllByIdsAsync(
+          mangaIds,
+        )).nonNulls)
+          m.id!: m,
+      };
+      return continueEntries(
+        recent,
+        chapterById: chapterById,
+        mangaById: mangaById,
+        progressOf: (manga) {
+          final summary = summaryFor(summaries, manga.id);
+          if (summary.total == 0) return 0;
+          return (summary.total - summary.unread) / summary.total;
+        },
+      );
+    });
 
 /// "Continue" at the top of a library: the series in progress for this
 /// media, one tap from the reader. Renders nothing when there is none.
@@ -90,30 +150,9 @@ class ContinueShelf extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     if (!ref.watch(continueShelfProvider)) return const SizedBox.shrink();
-    final history = ref.watch(getAllHistoryStreamProvider(itemType: itemType));
-    final entries = history.whenOrNull(
-      data: (rows) {
-        final chapterIds = rows.map((h) => h.chapterId).nonNulls.toList();
-        final chapterById = {
-          for (final c in chapterRepository.getAllByIds(chapterIds).nonNulls)
-            c.id!: c,
-        };
-        final mangaIds = chapterById.values
-            .map((c) => c.mangaId)
-            .nonNulls
-            .toSet()
-            .toList();
-        final mangaById = {
-          for (final m in mangaRepository.getAllByIds(mangaIds).nonNulls)
-            m.id!: m,
-        };
-        return continueEntries(
-          rows,
-          chapterById: chapterById,
-          mangaById: mangaById,
-        );
-      },
-    );
+    // The last answer stays up while a new one is worked out, so the shelf
+    // does not blink away on every library change.
+    final entries = ref.watch(continueEntriesProvider(itemType)).value;
     if (entries == null || entries.isEmpty) return const SizedBox.shrink();
 
     final tokens = context.shiori;

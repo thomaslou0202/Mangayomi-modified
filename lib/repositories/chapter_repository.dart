@@ -61,6 +61,9 @@ class ChapterRepository {
 
   List<Chapter?> getAllByIds(List<int> ids) => isar.chapters.getAllSync(ids);
 
+  Future<List<Chapter?>> getAllByIdsAsync(List<int> ids) =>
+      isar.chapters.getAll(ids);
+
   List<Chapter> getAllByMangaId(int? mangaId) => mangaId == null
       ? const []
       : isar.chapters.where().mangaIdEqualToAnyIsRead(mangaId).findAllSync();

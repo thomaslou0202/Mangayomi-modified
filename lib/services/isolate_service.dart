@@ -74,6 +74,9 @@ class _IsolateWorker {
   SendPort? sendPort;
   bool isBusy = false;
 
+  /// Whether the call it is running was started by background work.
+  bool background = false;
+
   Future<void> start(RootIsolateToken rootToken) async {
     receivePort = ReceivePort();
     isolate = await Isolate.spawn(
@@ -151,6 +154,10 @@ class GetIsolateService {
   Future<void>? _starting;
   final List<_IsolateWorker> _workers = [];
   final List<Completer<_IsolateWorker>> _pendingWorkers = [];
+
+  /// Calls from background work (downloads) waiting for a worker. Served only
+  /// after [_pendingWorkers], and never with the last free worker.
+  final List<Completer<_IsolateWorker>> _pendingBackground = [];
   static const int _poolSize = 4;
 
   /// Off under `flutter test`: a worker reaches the platform through
@@ -285,27 +292,57 @@ class GetIsolateService {
         });
   }
 
-  Future<_IsolateWorker> _getAvailableWorker() async {
-    if (!_isRunning) {
-      throw Exception('Isolate service not running');
-    }
+  int get _busyBackground =>
+      _workers.where((w) => w.isBusy && w.background).length;
+
+  /// Background work may hold every worker but one, so opening a source or a
+  /// chapter never queues behind a batch of downloads.
+  /// (A pool down to one worker shares it, or downloads would never start.)
+  bool get _backgroundMayStart =>
+      _workers.length <= 1 || _busyBackground < _workers.length - 1;
+
+  _IsolateWorker? _claimFree({required bool background}) {
+    if (background && !_backgroundMayStart) return null;
     for (final worker in _workers) {
       if (!worker.isBusy) {
-        worker.isBusy = true;
+        worker
+          ..isBusy = true
+          ..background = background;
         return worker;
       }
     }
+    return null;
+  }
+
+  Future<_IsolateWorker> _getAvailableWorker({bool background = false}) async {
+    if (!_isRunning) {
+      throw Exception('Isolate service not running');
+    }
+    final free = _claimFree(background: background);
+    if (free != null) return free;
     final completer = Completer<_IsolateWorker>();
-    _pendingWorkers.add(completer);
+    (background ? _pendingBackground : _pendingWorkers).add(completer);
     return completer.future;
   }
 
   void _releaseWorker(_IsolateWorker worker) {
-    worker.isBusy = false;
-    if (_pendingWorkers.isNotEmpty) {
-      final next = _pendingWorkers.removeAt(0);
-      worker.isBusy = true;
-      next.complete(worker);
+    worker
+      ..isBusy = false
+      ..background = false;
+    _dispatchPending();
+  }
+
+  /// Hands free workers to waiting calls: interactive ones first.
+  void _dispatchPending() {
+    while (_pendingWorkers.isNotEmpty) {
+      final worker = _claimFree(background: false);
+      if (worker == null) return;
+      _pendingWorkers.removeAt(0).complete(worker);
+    }
+    while (_pendingBackground.isNotEmpty) {
+      final worker = _claimFree(background: true);
+      if (worker == null) return;
+      _pendingBackground.removeAt(0).complete(worker);
     }
   }
 
@@ -331,10 +368,11 @@ class GetIsolateService {
   }
 
   void _failPending(String reason) {
-    for (final pending in _pendingWorkers) {
+    for (final pending in [..._pendingWorkers, ..._pendingBackground]) {
       if (!pending.isCompleted) pending.completeError(StateError(reason));
     }
     _pendingWorkers.clear();
+    _pendingBackground.clear();
     if (_workers.isEmpty) _isRunning = false;
   }
 
@@ -350,18 +388,17 @@ class GetIsolateService {
     String? proxyServer,
   }) async {
     return await withExtensionService(
-          source,
-          proxyServer ?? '',
-          (service) => _dispatch(
-            service,
-            serviceType: serviceType,
-            url: url,
-            page: page,
-            query: query,
-            filterList: filterList,
-          ),
-        )
-        as T;
+      source,
+      proxyServer ?? '',
+      (service) => _dispatch(
+        service,
+        serviceType: serviceType,
+        url: url,
+        page: page,
+        query: query,
+        filterList: filterList,
+      ),
+    ) as T;
   }
 
   Future<T> get<T>({
@@ -399,7 +436,9 @@ class GetIsolateService {
 
     final _IsolateWorker worker;
     try {
-      worker = await _getAvailableWorker();
+      worker = await _getAvailableWorker(
+        background: Zone.current[_backgroundWorkKey] == true,
+      );
     } on StateError {
       return runHere();
     }
@@ -475,3 +514,11 @@ class GetIsolateService {
 }
 
 final getIsolateService = GetIsolateService();
+
+final _backgroundWorkKey = Object();
+
+/// Runs [body] as background work: extension calls made inside it wait behind
+/// interactive ones and leave one worker free for them. For downloads, which
+/// can otherwise keep every worker busy while the reader opens a source.
+Future<T> runAsBackgroundWork<T>(Future<T> Function() body) =>
+    runZoned(body, zoneValues: {_backgroundWorkKey: true});

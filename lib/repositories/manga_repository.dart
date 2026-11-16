@@ -102,6 +102,9 @@ class MangaRepository {
 
   List<Manga?> getAllByIds(List<int> ids) => isar.mangas.getAllSync(ids);
 
+  Future<List<Manga?>> getAllByIdsAsync(List<int> ids) =>
+      isar.mangas.getAll(ids);
+
   Stream<List<int>> watchIdsByItemTypeAndSearch(
     ItemType itemType,
     String search,

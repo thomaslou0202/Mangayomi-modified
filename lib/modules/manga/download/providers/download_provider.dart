@@ -52,6 +52,23 @@ Future<void> downloadChapter(
   required Chapter chapter,
   bool? useWifi,
   VoidCallback? callback,
+}) =>
+    // Background work for the extension pool: a batch of downloads must not
+    // take every worker while the reader opens a source or a chapter.
+    runAsBackgroundWork(
+      () => _downloadChapter(
+        ref,
+        chapter: chapter,
+        useWifi: useWifi,
+        callback: callback,
+      ),
+    );
+
+Future<void> _downloadChapter(
+  Ref ref, {
+  required Chapter chapter,
+  bool? useWifi,
+  VoidCallback? callback,
 }) async {
   final keepAlive = ref.keepAlive();
   Future<void> progressWrites = Future.value();

@@ -344,6 +344,13 @@ class _SourceSearchScreenState extends ConsumerState<SourceSearchScreen> {
     // Throttled: with many sources installed, letting every row fire its
     // isolate call the moment it's built is what made this screen laggy.
     await widget.fetchGate.acquire();
+    // The query changed (or the screen closed) while this row waited its
+    // turn. Its request would only hold a slot and an extension worker for a
+    // result nobody will see, ahead of the rows for the new query.
+    if (!mounted) {
+      widget.fetchGate.release();
+      return;
+    }
     try {
       _errorMessage = "";
       // No query: same "Popular" request the source's own tab makes, so an
