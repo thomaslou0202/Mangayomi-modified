@@ -5,6 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:isar_community/isar.dart';
+
+import '../helpers/settle_db_writes.dart';
+
 import 'package:mangayomi/l10n/generated/app_localizations.dart';
 import 'package:mangayomi/main.dart';
 import 'package:mangayomi/models/settings.dart';
@@ -99,9 +102,7 @@ void main() {
     expect(styleLocked(tester), isTrue);
 
     // Lets the settings write queued by the switch finish.
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 50)),
-    );
+    await settleDbWrites(tester);
   });
 
   testWidgets('without libass there is no switch and the style stays open', (

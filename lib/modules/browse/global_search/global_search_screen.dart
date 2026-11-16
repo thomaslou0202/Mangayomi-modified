@@ -31,6 +31,25 @@ import 'package:super_sliver_list/super_sliver_list.dart';
 import 'package:mangayomi/modules/widgets/tv_pill.dart';
 import 'package:mangayomi/utils/platform_utils.dart';
 
+/// The library of one item type, by title.
+///
+/// One watch for the whole screen. Each result card used to open its own
+/// database watch to learn whether it was already in the library, so a search
+/// across many sources held hundreds of them open, each re-run on every
+/// library write.
+final _libraryByNameProvider =
+    StreamProvider.autoDispose.family<Map<String?, List<Manga>>, ItemType>(
+      (ref, itemType) => mangaRepository
+          .watchFavorites(itemType)
+          .map((mangas) {
+            final byName = <String?, List<Manga>>{};
+            for (final manga in mangas) {
+              (byName[manga.name] ??= []).add(manga);
+            }
+            return byName;
+          }),
+    );
+
 class GlobalSearchScreen extends ConsumerStatefulWidget {
   final String? search;
   final ItemType itemType;
@@ -589,13 +608,15 @@ class _MangaGlobalImageCardState extends ConsumerState<MangaGlobalImageCard>
           child: GestureDetector(
             onTap: _open,
             onLongPress: _quickAddToLibrary,
-            child: StreamBuilder(
-              stream: mangaRepository.watchFavoritesByItemTypeAndName(
-                widget.source.itemType,
-                getMangaDetail.name,
-              ),
-              builder: (context, snapshot) {
-                final favorites = snapshot.data ?? const <Manga>[];
+            child: Builder(
+              builder: (context) {
+                final favorites =
+                    ref.watch(
+                      _libraryByNameProvider(
+                        widget.source.itemType,
+                      ).select((byName) => byName.value?[getMangaDetail.name]),
+                    ) ??
+                    const <Manga>[];
                 final sameSource = favorites.where(
                   (m) =>
                       m.lang == widget.source.lang &&

@@ -69,11 +69,12 @@ List<Manga> filteredLibraryManga(
       ref.watch(trackedMangaIdsProvider).asData?.value ?? const <int>{};
 
   List<Manga> mangas;
+  final keywords = searchKeywords(searchQuery);
 
   // Skip all filters, just do search
   if (searchQuery.isNotEmpty && ignoreFiltersOnSearch) {
     mangas = data
-        .where((element) => _matchesSearchQuery(element, searchQuery))
+        .where((element) => matchesSearchKeywords(element, keywords))
         .toList();
   } else {
     mangas = data.where((element) {
@@ -132,7 +133,7 @@ List<Manga> filteredLibraryManga(
 
       // Search filter
       if (searchQuery.isNotEmpty) {
-        if (!_matchesSearchQuery(element, searchQuery)) return false;
+        if (!matchesSearchKeywords(element, keywords)) return false;
       }
 
       return true;
@@ -201,17 +202,50 @@ List<Manga> filteredLibraryManga(
   return mangas;
 }
 
-bool _matchesSearchQuery(Manga manga, String query) {
-  final keywords = query
-      .toLowerCase()
-      .split(',')
-      .map((k) => k.trim())
-      .where((k) => k.isNotEmpty);
+/// The comma-separated terms of a library search, lower-cased once per search
+/// rather than once per title.
+List<String> searchKeywords(String query) => query
+    .toLowerCase()
+    .split(',')
+    .map((k) => k.trim())
+    .where((k) => k.isNotEmpty)
+    .toList();
 
+/// Whether [manga] matches any of [keywords] by title, source or genre.
+bool matchesSearchKeywords(Manga manga, List<String> keywords) {
+  if (keywords.isEmpty) return true;
+  final fields = _searchFieldsOf(manga);
   return keywords.any(
     (keyword) =>
-        (manga.name?.toLowerCase().contains(keyword) ?? false) ||
-        (manga.source?.toLowerCase().contains(keyword) ?? false) ||
-        (manga.genre?.any((g) => g.toLowerCase().contains(keyword)) ?? false),
+        fields.name.contains(keyword) ||
+        fields.source.contains(keyword) ||
+        fields.genres.any((g) => g.contains(keyword)),
   );
+}
+
+/// A title's searchable text, lower-cased once and kept with the object.
+///
+/// Typing searches the whole library on every keystroke; lower-casing every
+/// title, source and genre each time was most of that work. The library
+/// stream hands out new objects when the library changes, so this never goes
+/// stale.
+final _searchFields = Expando<_SearchFields>('librarySearchFields');
+
+_SearchFields _searchFieldsOf(Manga manga) =>
+    _searchFields[manga] ??= _SearchFields(
+      name: manga.name?.toLowerCase() ?? '',
+      source: manga.source?.toLowerCase() ?? '',
+      genres: [for (final g in manga.genre ?? const <String>[]) g.toLowerCase()],
+    );
+
+class _SearchFields {
+  const _SearchFields({
+    required this.name,
+    required this.source,
+    required this.genres,
+  });
+
+  final String name;
+  final String source;
+  final List<String> genres;
 }

@@ -4,7 +4,7 @@ import 'dart:ui';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/widgets.dart';
-import 'package:mangayomi/eval/lib.dart';
+import 'package:mangayomi/services/isolate_service.dart';
 import 'package:mangayomi/eval/model/m_bridge.dart';
 import 'package:mangayomi/models/manga.dart';
 import 'package:mangayomi/models/page.dart';
@@ -507,10 +507,12 @@ Future<void> downloadChapter(
       final proxy = ref.read(androidProxyServerStateProvider);
       await saveNovelDownload(
         file: file,
-        load: () => withExtensionService(
-          source,
-          proxy,
-          (service) => service.getHtmlContent(manga.name!, chapter.url!),
+        load: () => getIsolateService.get<String>(
+          source: source,
+          serviceType: 'getHtmlContent',
+          query: manga.name!,
+          url: chapter.url!,
+          proxyServer: proxy,
         ),
         isCancelled: () => isDownloadCancelled(chapter),
       );

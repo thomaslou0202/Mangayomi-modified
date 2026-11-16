@@ -105,20 +105,16 @@ class DownloadRepository {
   });
 
   Future<void> save(Download download) => dbWriteQueue.run(
-    () => isar.writeTxnSync(() => isar.downloads.putSync(download)),
+    () => isar.writeTxn(() => isar.downloads.put(download)),
   );
 
   Future<void> delete(int id) => dbWriteQueue.run(
-    () => isar.writeTxnSync(() => isar.downloads.deleteSync(id)),
+    () => isar.writeTxn(() => isar.downloads.delete(id)),
   );
 
-  Future<void> deleteAll(List<int> ids) => dbWriteQueue.run(() {
-    isar.writeTxnSync(() {
-      for (final id in ids) {
-        isar.downloads.deleteSync(id);
-      }
-    });
-  });
+  Future<void> deleteAll(List<int> ids) => dbWriteQueue.run(
+    () => isar.writeTxn(() => isar.downloads.deleteAll(ids)),
+  );
 
   // Escape hatch for download-rooted read transactions too specific to name.
   Future<T> transaction<T>(T Function() body) =>

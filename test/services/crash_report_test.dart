@@ -113,12 +113,13 @@ void main() {
 
         expect(CrashReports.reports, hasLength(10));
         expect(CrashReports.reports.first.error, 'error 20');
+        await CrashReports.flushPending();
         final stored = jsonDecode(file().readAsStringSync()) as Map;
         expect(stored['reports'], hasLength(10));
       },
     );
 
-    test('identical errors are folded into one useful entry', () {
+    test('identical errors are folded into one useful entry', () async {
       for (var i = 0; i < 3; i++) {
         CrashReports.record(
           source: 'FlutterError',
@@ -129,8 +130,26 @@ void main() {
 
       expect(CrashReports.reports, hasLength(1));
       expect(CrashReports.latest!.occurrences, 3);
+      await CrashReports.flushPending();
       final stored = jsonDecode(file().readAsStringSync()) as Map;
       expect((stored['reports'] as List).single['occurrences'], 3);
+    });
+
+    test('a burst of errors is written once, later, not one by one', () async {
+      for (var i = 0; i < 20; i++) {
+        CrashReports.record(
+          source: 'FlutterError',
+          error: 'Bad state: Failed to load https://example.test/$i.jpg',
+        );
+      }
+      // Nothing written on the UI thread while the errors arrive.
+      expect(file().existsSync(), false);
+
+      await CrashReports.flushPending();
+
+      final stored = jsonDecode(file().readAsStringSync()) as Map;
+      // The redacted URLs make them one fault, counted twenty times.
+      expect((stored['reports'] as List).single['occurrences'], 20);
     });
 
     test('the same generic message on different screens stays separate', () {

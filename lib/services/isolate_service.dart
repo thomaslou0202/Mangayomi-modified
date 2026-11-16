@@ -1,15 +1,64 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:mangayomi/eval/interface.dart';
 import 'package:mangayomi/eval/lib.dart';
 import 'package:mangayomi/repositories/db.dart';
 import 'package:mangayomi/models/source.dart';
 import 'package:mangayomi/providers/storage_provider.dart';
 import 'package:mangayomi/services/http/m_client.dart';
+import 'package:mangayomi/src/rust/frb_generated.dart';
 import 'package:mangayomi/utils/log/log.dart';
+
+/// Whether [source]'s extension can run in a worker isolate.
+///
+/// Building an extension service evaluates the whole extension, and its
+/// parsing runs synchronously. On the root isolate that blocks the UI, which
+/// is what froze the app while opening a title or loading a list. Everything
+/// a JavaScript, Dart, Mihon or LNReader extension needs from the root isolate
+/// (WebView pages, Cloudflare solving) goes through the loopback bridge in
+/// m_client.dart, so those run in the pool.
+///
+/// Aidoku is the exception: it drives HeadlessInAppWebView and CookieManager
+/// itself, and the plugin's callbacks into Dart only reach the root isolate.
+bool runsInWorkerIsolate(Source source) =>
+    source.sourceCodeLanguage != SourceCodeLanguage.aidoku;
+
+/// Runs one service call. Shared by the worker isolates and the root-isolate
+/// fallback so both answer the same way.
+Future<Object?> _dispatch(
+  ExtensionService service, {
+  required String? serviceType,
+  String? url,
+  int? page,
+  String? query,
+  List<dynamic>? filterList,
+}) async {
+  switch (serviceType) {
+    case 'getDetail':
+      return await service.getDetail(url!);
+    case 'getPopular':
+      return await service.getPopular(page!);
+    case 'getLatestUpdates':
+      return await service.getLatestUpdates(page!);
+    case 'search':
+      return await service.search(query!, page!, filterList!);
+    case 'getVideoList':
+      return await service.getVideoList(url!);
+    case 'getPageList':
+      return await service.getPageList(url!);
+    case 'getHtmlContent':
+      return await service.getHtmlContent(query ?? '', url!);
+    case 'getHeaders':
+      return service.getHeaders();
+    default:
+      throw Exception('Unknown service type: $serviceType');
+  }
+}
 
 class _IsolateData {
   final SendPort sendPort;
@@ -38,7 +87,32 @@ class _IsolateWorker {
     final completer = Completer<SendPort>();
     receiveSub = receivePort!.listen((message) {
       if (message is SendPort) {
-        completer.complete(message);
+        if (!completer.isCompleted) completer.complete(message);
+        return;
+      }
+      if (message is Map && message['workerInitError'] != null) {
+        // The worker could not open the database or its libraries. Say so now
+        // instead of making the caller wait out the handshake timeout.
+        if (!completer.isCompleted) {
+          completer.completeError(
+            StateError('Isolate worker failed: ${message['workerInitError']}'),
+          );
+        }
+        return;
+      }
+      if (message is Map && message['cloudflareAlert'] == true) {
+        // An extension in this worker hit a Cloudflare challenge. The toast
+        // and its "open in WebView" button only exist on the root isolate.
+        try {
+          showCloudflareAlertFor(
+            url: message['url'] as String?,
+            statusCode: message['statusCode'] as int? ?? 0,
+          );
+        } catch (_) {
+          // No toast host yet (very early in launch); the call itself still
+          // reports its failure to whoever made it.
+        }
+        return;
       }
       if (message is String) {
         final logged = redactHeadersInText(message);
@@ -56,8 +130,10 @@ class _IsolateWorker {
       }
     });
 
+    // The worker opens the database and the Rust library before it answers,
+    // so give a slow phone more room than a bare spawn would need.
     sendPort = await completer.future.timeout(
-      const Duration(seconds: 5),
+      const Duration(seconds: 20),
       onTimeout: () => throw StateError('Isolate handshake timed out'),
     );
   }
@@ -72,23 +148,57 @@ class _IsolateWorker {
 
 class GetIsolateService {
   bool _isRunning = false;
+  Future<void>? _starting;
   final List<_IsolateWorker> _workers = [];
   final List<Completer<_IsolateWorker>> _pendingWorkers = [];
   static const int _poolSize = 4;
 
-  Future<void> start() async {
-    if (!_isRunning) {
-      try {
-        final rootToken = RootIsolateToken.instance!;
-        for (int i = 0; i < _poolSize; i++) {
-          final worker = _IsolateWorker();
-          await worker.start(rootToken);
-          _workers.add(worker);
-        }
-        _isRunning = true;
-      } catch (_) {
-        await stop();
-      }
+  /// Off under `flutter test`: a worker reaches the platform through
+  /// BackgroundIsolateBinaryMessenger, which the test binding does not answer,
+  /// so it would wait forever opening the database.
+  static bool usePool = !Platform.environment.containsKey('FLUTTER_TEST');
+
+  /// How long one call may run before its worker is replaced. Generous on
+  /// purpose: a large catalogue or a WebView-backed page can take a while,
+  /// and before the pool handled these sources they had no limit at all.
+  static const Duration _callTimeout = Duration(minutes: 3);
+
+  /// Starts the pool. Concurrent callers share one start, so a burst of
+  /// requests on launch does not spawn the pool several times over.
+  Future<void> start() {
+    if (_isRunning) return Future.value();
+    // A pool that just failed to start would fail again; don't respawn it on
+    // every call while the root isolate covers for it.
+    final failedAt = _startFailedAt;
+    if (failedAt != null &&
+        DateTime.now().difference(failedAt) < _retryStartAfter) {
+      return Future.value();
+    }
+    return _starting ??= _start().whenComplete(() => _starting = null);
+  }
+
+  DateTime? _startFailedAt;
+  static const Duration _retryStartAfter = Duration(minutes: 1);
+
+  Future<void> _start() async {
+    final rootToken = RootIsolateToken.instance;
+    if (rootToken == null) return;
+    final started = await Future.wait(
+      List.generate(_poolSize, (_) => _spawnWorker(rootToken)),
+    );
+    _workers.addAll(started.whereType<_IsolateWorker>());
+    _isRunning = _workers.isNotEmpty;
+    _startFailedAt = _isRunning ? null : DateTime.now();
+  }
+
+  Future<_IsolateWorker?> _spawnWorker(RootIsolateToken rootToken) async {
+    final worker = _IsolateWorker();
+    try {
+      await worker.start(rootToken);
+      return worker;
+    } catch (_) {
+      await worker.stop();
+      return null;
     }
   }
 
@@ -99,9 +209,31 @@ class GetIsolateService {
       isolateData.rootIsolateToken,
     );
 
-    await initializeDateFormatting();
+    // The Rust library holds the HTTP client extensions use (rhttp). Without
+    // it here, MClient quietly falls back to dart:io, which handshakes
+    // differently and is turned away by some sites. Each isolate needs its own
+    // init; the library has no one-time Rust initializers.
+    try {
+      await RustLib.init();
+    } catch (_) {}
 
-    isar = await StorageProvider().initDB(null, inspector: kDebugMode);
+    try {
+      await initializeDateFormatting();
+      isar = await StorageProvider().initDB(null, inspector: kDebugMode);
+    } catch (e) {
+      isolateData.sendPort.send({'workerInitError': e.toString()});
+      return;
+    }
+
+    // Raised from m_client when a request hits a Cloudflare challenge; handed
+    // to the root isolate, which owns the toast.
+    cloudflareAlertForwarder = (url, statusCode) {
+      isolateData.sendPort.send({
+        'cloudflareAlert': true,
+        'url': url,
+        'statusCode': statusCode,
+      });
+    };
 
     final receivePort = ReceivePort();
     Zone.current
@@ -118,45 +250,27 @@ class GetIsolateService {
             if (message is Map<String, dynamic>) {
               final responsePort = message['responsePort'] as SendPort;
               try {
-                final url = message['url'] as String?;
-                final page = message['page'] as int?;
-                final query = message['query'] as String?;
-                final filterList = message['filterList'] as List?;
                 final source = message['source'] as Source?;
                 final proxyServer = message['proxyServer'] as String?;
-                final serviceType = message['serviceType'] as String?;
                 final useLoggerValue = message['useLogger'] as bool?;
                 cfPort = message['cfPort'] as int;
                 webviewBridgeToken =
                     message['webviewBridgeToken'] as String? ?? '';
+                customDns = message['customDns'] as String?;
                 if (useLoggerValue != null) {
                   useLogger = useLoggerValue;
                 }
                 final result = await withExtensionService(
                   source!,
                   proxyServer ?? '',
-                  (service) async {
-                    switch (serviceType) {
-                      case 'getDetail':
-                        return await service.getDetail(url!);
-                      case 'getPopular':
-                        return await service.getPopular(page!);
-                      case 'getLatestUpdates':
-                        return await service.getLatestUpdates(page!);
-                      case 'search':
-                        return await service.search(query!, page!, filterList!);
-                      case 'getVideoList':
-                        return await service.getVideoList(url!);
-                      case 'getPageList':
-                        return await service.getPageList(url!);
-                      case 'getHtmlContent':
-                        return await service.getHtmlContent(query ?? '', url!);
-                      case 'getHeaders':
-                        return Future.value(service.getHeaders());
-                      default:
-                        throw Exception('Unknown service type: $serviceType');
-                    }
-                  },
+                  (service) => _dispatch(
+                    service,
+                    serviceType: message['serviceType'] as String?,
+                    url: message['url'] as String?,
+                    page: message['page'] as int?,
+                    query: message['query'] as String?,
+                    filterList: message['filterList'] as List?,
+                  ),
                 );
                 responsePort.send({'success': true, 'data': result});
               } catch (e) {
@@ -195,6 +309,61 @@ class GetIsolateService {
     }
   }
 
+  /// Replaces a worker whose call timed out. Handing it the next call instead
+  /// would run two calls in one isolate at once, and they share its globals
+  /// (proxy port, logger flag).
+  void _retireWorker(_IsolateWorker worker) {
+    _workers.remove(worker);
+    unawaited(worker.stop());
+    final rootToken = RootIsolateToken.instance;
+    if (rootToken == null) return;
+    unawaited(
+      _spawnWorker(rootToken).then((fresh) {
+        if (fresh == null || !_isRunning) {
+          if (fresh != null) unawaited(fresh.stop());
+          if (_workers.isEmpty) _failPending('No isolate worker available');
+          return;
+        }
+        _workers.add(fresh);
+        _releaseWorker(fresh);
+      }),
+    );
+  }
+
+  void _failPending(String reason) {
+    for (final pending in _pendingWorkers) {
+      if (!pending.isCompleted) pending.completeError(StateError(reason));
+    }
+    _pendingWorkers.clear();
+    if (_workers.isEmpty) _isRunning = false;
+  }
+
+  /// Runs the call on the root isolate. Only for sources that cannot leave it
+  /// ([runsInWorkerIsolate]) and for when the pool is unavailable.
+  Future<T> _runHere<T>({
+    required Source source,
+    required String? serviceType,
+    String? url,
+    int? page,
+    String? query,
+    List<dynamic>? filterList,
+    String? proxyServer,
+  }) async {
+    return await withExtensionService(
+          source,
+          proxyServer ?? '',
+          (service) => _dispatch(
+            service,
+            serviceType: serviceType,
+            url: url,
+            page: page,
+            query: query,
+            filterList: filterList,
+          ),
+        )
+        as T;
+  }
+
   Future<T> get<T>({
     String? url,
     int? page,
@@ -207,44 +376,42 @@ class GetIsolateService {
     String? androidProxyServer,
     bool? useLogger,
   }) async {
-    if (source?.sourceCodeLanguage != SourceCodeLanguage.lnreader) {
-      return withExtensionService(source!, proxyServer ?? '', (service) async {
-        switch (serviceType) {
-          case 'getDetail':
-            return (await service.getDetail(url!)) as T;
-          case 'getPopular':
-            return (await service.getPopular(page!)) as T;
-          case 'getLatestUpdates':
-            return (await service.getLatestUpdates(page!)) as T;
-          case 'search':
-            return (await service.search(query!, page!, filterList!)) as T;
-          case 'getVideoList':
-            return (await service.getVideoList(url!)) as T;
-          case 'getPageList':
-            return (await service.getPageList(url!)) as T;
-          case 'getHtmlContent':
-            return (await service.getHtmlContent(query ?? '', url!)) as T;
-          case 'getHeaders':
-            return (service.getHeaders()) as T;
-          default:
-            throw Exception('Unknown service type: $serviceType');
-        }
-      });
+    if (source == null) {
+      throw ArgumentError.notNull('source');
     }
+    Future<T> runHere() => _runHere<T>(
+      source: source,
+      serviceType: serviceType,
+      url: url,
+      page: page,
+      query: query,
+      filterList: filterList,
+      proxyServer: proxyServer,
+    );
+
+    if (!usePool || !runsInWorkerIsolate(source)) return runHere();
     if (!_isRunning) {
       await start();
     }
+    // Spawning failed (no root token in a test, out of memory): keep the app
+    // working the way it did before the pool took these sources.
+    if (!_isRunning) return runHere();
 
-    final worker = await _getAvailableWorker();
+    final _IsolateWorker worker;
+    try {
+      worker = await _getAvailableWorker();
+    } on StateError {
+      return runHere();
+    }
     final responsePort = ReceivePort();
     final completer = Completer<T>();
     late final StreamSubscription sub;
 
-    final timer = Timer(const Duration(seconds: 40), () {
+    final timer = Timer(_callTimeout, () {
       if (!completer.isCompleted) {
         sub.cancel();
         responsePort.close();
-        _releaseWorker(worker);
+        _retireWorker(worker);
         completer.completeError('Isolate response timeout');
       }
     });
@@ -272,19 +439,22 @@ class GetIsolateService {
         'query': ?query,
         'filterList': ?filterList,
         'serviceType': ?serviceType,
-        'source': ?source,
+        'source': source,
         'proxyServer': ?proxyServer,
         'responsePort': responsePort.sendPort,
         'useLogger': ?useLogger,
         'cfPort': cfPort,
         'webviewBridgeToken': webviewBridgeToken,
+        'customDns': ?customDns,
       });
-    } catch (e) {
+    } catch (_) {
+      // Something in the call cannot cross isolates (a filter list holding a
+      // Dart-extension object, say). Run it here rather than fail it.
       timer.cancel();
       sub.cancel();
       responsePort.close();
       _releaseWorker(worker);
-      completer.completeError(e);
+      return runHere();
     }
 
     return completer.future;
@@ -299,13 +469,8 @@ class GetIsolateService {
       await worker.stop();
     }
     _workers.clear();
-    for (final pending in _pendingWorkers) {
-      if (!pending.isCompleted) {
-        pending.completeError(StateError('Isolate service stopped'));
-      }
-    }
-    _pendingWorkers.clear();
     _isRunning = false;
+    _failPending('Isolate service stopped');
   }
 }
 

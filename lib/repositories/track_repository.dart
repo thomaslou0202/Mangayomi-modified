@@ -155,7 +155,9 @@ class TrackRepository {
       ?.mediaId;
 
   Future<void> savePreference(TrackPreference preference) => dbWriteQueue.run(
-    () => isar.writeTxnSync(() => isar.trackPreferences.putSync(preference)),
+    // Asynchronous: a synchronous commit here held the UI thread for up to a
+    // second at launch, waiting out the background sync's write.
+    () => isar.writeTxn(() => isar.trackPreferences.put(preference)),
   );
 
   Future<void> putAllPreferences(List<TrackPreference> preferences) =>
@@ -164,7 +166,7 @@ class TrackRepository {
       );
 
   Future<void> deletePreference(int syncId) => dbWriteQueue.run(
-    () => isar.writeTxnSync(() => isar.trackPreferences.deleteSync(syncId)),
+    () => isar.writeTxn(() => isar.trackPreferences.delete(syncId)),
   );
 
   // Stamps updatedAt for callers that just want to persist a mutated Track

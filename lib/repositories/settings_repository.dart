@@ -28,38 +28,52 @@ class SettingsRepository {
       .watch(fireImmediately: true)
       .map((l) => l.first);
 
-  Future<void> update(void Function(Settings s) mutate) => dbWriteQueue.run(() {
-    isar.writeTxnSync(() {
+  // These writes are asynchronous transactions. The Settings row carries
+  // per-title lists, so it grows with the library, and a synchronous commit
+  // held the UI thread for its whole write and flush - and, while a sync was
+  // writing in the background, for as long as that held the database lock.
+  // Opening a title paid that every time.
+  Future<void> update(void Function(Settings s) mutate) => dbWriteQueue.run(
+    () => isar.writeTxn(() async {
       // A damaged/partially-created database must not turn every settings
       // control into a null-check crash. Recreate the singleton row with its
       // model defaults and apply the requested change in the same transaction.
-      final s = currentOrNull ?? Settings();
+      final s = await _readForWrite() ?? Settings();
       mutate(s);
       s.updatedAt = DateTime.now().millisecondsSinceEpoch;
-      isar.settings.putSync(s);
-    });
-  });
+      await isar.settings.put(s);
+    }),
+  );
+
+  Future<Settings?> _readForWrite() async {
+    try {
+      return await isar.settings.get(227);
+    } catch (error, stackTrace) {
+      recordError(error, stack: stackTrace, source: 'settings_repository');
+      return null;
+    }
+  }
 
   // Like update(), but leaves updatedAt alone: for app state this device keeps
   // (when Updates was last seen), which is not a settings change and must not
   // make this device's settings win the next sync.
   Future<void> updateLocalState(void Function(Settings s) mutate) =>
-      dbWriteQueue.run(() {
-        isar.writeTxnSync(() {
-          final s = currentOrNull ?? Settings();
+      dbWriteQueue.run(
+        () => isar.writeTxn(() async {
+          final s = await _readForWrite() ?? Settings();
           mutate(s);
-          isar.settings.putSync(s);
-        });
-      });
+          await isar.settings.put(s);
+        }),
+      );
 
   // For callers that already hold the Settings instance to mutate (e.g. a family
   // provider's cached param) rather than wanting a freshly-fetched one.
-  Future<void> save(Settings s) => dbWriteQueue.run(() {
-    isar.writeTxnSync(() {
+  Future<void> save(Settings s) => dbWriteQueue.run(
+    () => isar.writeTxn(() async {
       s.updatedAt = DateTime.now().millisecondsSinceEpoch;
-      isar.settings.putSync(s);
-    });
-  });
+      await isar.settings.put(s);
+    }),
+  );
 
   // Sync primitive below is for callers already inside a write transaction
   // opened by transaction()/writeTransaction() — it doesn't queue on its own.

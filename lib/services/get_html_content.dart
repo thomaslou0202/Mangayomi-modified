@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:mangayomi/src/rust/api/epub.dart';
 import 'package:html/parser.dart';
-import 'package:mangayomi/eval/lib.dart';
+import 'package:mangayomi/services/isolate_service.dart';
 import 'package:mangayomi/models/chapter.dart';
 import 'package:mangayomi/services/local_folders.dart';
 import 'package:mangayomi/providers/browse_state_provider.dart';
@@ -109,13 +109,14 @@ Future<(String, EpubNovel?)> getHtmlContent(
         );
         if (!ref.mounted) return ('', null);
         final proxyServer = ref.read(androidProxyServerStateProvider);
-        final html = await withExtensionService(
-          source!,
-          proxyServer,
-          (service) async => await service.getHtmlContent(
-            chapter.manga.value!.name!,
-            chapter.url!,
-          ),
+        // In the worker pool: evaluating the extension and parsing the page
+        // on the root isolate froze the reader while a chapter opened.
+        final html = await getIsolateService.get<String>(
+          source: source!,
+          serviceType: 'getHtmlContent',
+          query: chapter.manga.value!.name!,
+          url: chapter.url!,
+          proxyServer: proxyServer,
         );
         final stripped = decodeNovelHtmlResponse(html);
         result = (_buildHtml(stripped), null);

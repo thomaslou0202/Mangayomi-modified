@@ -433,7 +433,23 @@ class CloudflareAlertScope {
   }
 }
 
+/// Set in an extension worker isolate, which has no toast host of its own: a
+/// Cloudflare alert raised there is handed to the root isolate through this.
+void Function(String? url, int statusCode)? cloudflareAlertForwarder;
+
 void _showCloudflareAlert(BaseResponse response) {
+  final url = response.request?.url.toString();
+  final forward = cloudflareAlertForwarder;
+  if (forward != null) {
+    forward(url, response.statusCode);
+    return;
+  }
+  showCloudflareAlertFor(url: url, statusCode: response.statusCode);
+}
+
+/// The Cloudflare toast, with its button to solve the challenge in a WebView.
+/// Root isolate only; worker isolates reach it via [cloudflareAlertForwarder].
+void showCloudflareAlertFor({required String? url, required int statusCode}) {
   // The in-app resolver is disabled on Linux, and cookies cannot be read back
   // from a webview there either, so the offer to solve it manually in one is
   // an offer nobody on Linux can take. A proxy is the only thing that gets
@@ -444,16 +460,16 @@ void _showCloudflareAlert(BaseResponse response) {
     botToast(
       noResolverAvailable
           ? "Cloudflare check. Add bypass URL: Settings > General."
-          : "Cloudflare verification required (HTTP ${response.statusCode})",
+          : "Cloudflare verification required (HTTP $statusCode)",
       // The button opens the webview resolver, which does nothing on Linux.
       hasCloudFlare: !noResolverAvailable,
-      url: response.request?.url.toString(),
+      url: url,
       maxLines: noResolverAvailable ? 6 : 2,
     );
   } catch (e) {
     throw noResolverAvailable
-        ? "Blocked by Cloudflare.\n\n\nThe in-app resolver is not available on Linux. Set a FlareSolverr or Byparr URL in Settings > General.\n\n\nstatusCode: ${response.statusCode}"
-        : "Failed to bypass Cloudflare.\n\n\nYou can try to bypass it manually in the webview \n\n\nstatusCode: ${response.statusCode}";
+        ? "Blocked by Cloudflare.\n\n\nThe in-app resolver is not available on Linux. Set a FlareSolverr or Byparr URL in Settings > General.\n\n\nstatusCode: $statusCode"
+        : "Failed to bypass Cloudflare.\n\n\nYou can try to bypass it manually in the webview \n\n\nstatusCode: $statusCode";
   }
 }
 

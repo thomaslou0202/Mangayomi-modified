@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:isar_community/isar.dart';
+import 'package:mangayomi/repositories/db_write_queue.dart';
 import 'package:mangayomi/main.dart';
 import 'package:mangayomi/models/settings.dart';
 import 'package:mangayomi/models/source.dart';
@@ -34,6 +35,8 @@ void main() {
   });
 
   tearDown(() async {
+    // Settings writes run as background transactions; let them land first.
+    await dbWriteQueue.whenIdle();
     await isar.close(deleteFromDisk: true);
     if (directory.existsSync()) directory.deleteSync(recursive: true);
   });

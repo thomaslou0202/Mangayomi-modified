@@ -7,6 +7,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:isar_community/isar.dart';
+
+import '../../helpers/settle_db_writes.dart';
+
 import 'package:mangayomi/l10n/generated/app_localizations.dart';
 import 'package:mangayomi/main.dart' as app;
 import 'package:mangayomi/models/manga.dart';
@@ -186,6 +189,8 @@ void main() {
       await show(tester, ItemType.manga, [source]);
       await tester.tap(find.byTooltip('Pin'));
       await tester.pump();
+      // The pin is saved by a background transaction.
+      await settleDbWrites(tester);
       expect(app.isar.sources.getSync(42)!.isPinned, true);
       expect(tester.takeException(), isNull);
       // Dispose provider listeners before the temporary database is closed.

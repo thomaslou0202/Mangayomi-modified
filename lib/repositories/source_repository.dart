@@ -168,12 +168,12 @@ class SourceRepository {
 
   // Stamps updatedAt for callers that just want to persist a mutated Source
   // they already hold, without setting the timestamp themselves.
-  Future<void> save(Source source) => dbWriteQueue.run(() {
-    isar.writeTxnSync(() {
+  Future<void> save(Source source) => dbWriteQueue.run(
+    () => isar.writeTxn(() async {
       source.updatedAt = DateTime.now().millisecondsSinceEpoch;
-      isar.sources.putSync(source);
-    });
-  });
+      await isar.sources.put(source);
+    }),
+  );
 
   Future<void> delete(int id) =>
       dbWriteQueue.run(() => isar.writeTxn(() => isar.sources.delete(id)));
@@ -208,7 +208,7 @@ class SourceRepository {
       );
 
   Future<void> putAll(List<Source> sources) => dbWriteQueue.run(
-    () => isar.writeTxnSync(() => isar.sources.putAllSync(sources)),
+    () => isar.writeTxn(() => isar.sources.putAll(sources)),
   );
 
   Future<void> deleteAll(List<int> ids) =>

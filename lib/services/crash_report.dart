@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -334,6 +335,7 @@ class CrashReports {
 
   static Future<void> _init(Directory? directory) async {
     if (directory == null) return;
+    await flushPending();
     _file = File(p.join(directory.path, _fileName));
     _reports.clear();
     try {
@@ -367,7 +369,7 @@ class CrashReports {
     _pending.clear();
     _loaded = true;
     _trim();
-    if (hadPending) _flush();
+    if (hadPending) await _write();
   }
 
   /// Records one caught error.
@@ -428,6 +430,15 @@ class CrashReports {
   /// process-global, so a test that wants a second launch has to say so.
   @visibleForTesting
   static void resetForTest() {
+    // What a process that ran on would have written by now.
+    final timer = _flushTimer;
+    _flushTimer = null;
+    if (timer != null) {
+      timer.cancel();
+      try {
+        _file?.writeAsStringSync(_encode());
+      } catch (_) {}
+    }
     _reports.clear();
     _pending.clear();
     _reported.clear();
@@ -471,18 +482,58 @@ class CrashReports {
     );
   }
 
+  /// Schedules the file to be rewritten.
+  ///
+  /// Never on the spot: a page of covers that fail to load records one error
+  /// each, and rewriting and flushing the whole file to disk for every one of
+  /// them on the UI thread held the app for seconds on a slow drive. Records
+  /// made close together share one write, which runs off the UI thread.
   static void _flush() {
+    if (_file == null) return;
+    _flushTimer ??= Timer(_flushDelay, () {
+      _flushTimer = null;
+      unawaited(_write());
+    });
+  }
+
+  static const _flushDelay = Duration(milliseconds: 500);
+  static Timer? _flushTimer;
+  static Future<void>? _writing;
+  static bool _writeAgain = false;
+
+  static String _encode() => jsonEncode({
+    'reports': _reports.map((e) => e.toJson()).toList(),
+    'reported': _reported.toList(),
+  });
+
+  static Future<void> _write() {
     final file = _file;
-    if (file == null) return;
-    try {
-      file.writeAsStringSync(
-        jsonEncode({
-          'reports': _reports.map((e) => e.toJson()).toList(),
-          'reported': _reported.toList(),
-        }),
-        flush: true,
-      );
-    } catch (_) {}
+    if (file == null) return Future.value();
+    final inFlight = _writing;
+    if (inFlight != null) {
+      // Picked up by the write already running, once it finishes.
+      _writeAgain = true;
+      return inFlight;
+    }
+    final done = () async {
+      do {
+        _writeAgain = false;
+        try {
+          await file.writeAsString(_encode(), flush: true);
+        } catch (_) {}
+      } while (_writeAgain);
+    }();
+    _writing = done;
+    return done.whenComplete(() => _writing = null);
+  }
+
+  /// Writes out anything recorded but not yet on disk.
+  static Future<void> flushPending() {
+    final timer = _flushTimer;
+    _flushTimer = null;
+    timer?.cancel();
+    if (timer != null) return _write();
+    return _writing ?? Future.value();
   }
 
   /// Keeps the frames that point at this app plus a little context. A full
