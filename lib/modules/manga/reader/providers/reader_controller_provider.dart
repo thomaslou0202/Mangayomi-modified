@@ -193,17 +193,21 @@ class ReaderController extends _$ReaderController
           }
         }
         final chap = chapter;
-        chapterRepository.writeTransaction(() {
-          settingsRepository.putSync(
-            getIsarSetting()
-              ..chapterPageIndexList = chapterPageIndexs
-              ..updatedAt = now,
-          );
-          chap.isRead = isRead;
-          chap.lastPageRead = isRead ? '1' : (newIndex + 1).toString();
-          chap.updatedAt = now;
-          chapterRepository.putSync(chap);
-          if (siblings.isNotEmpty) chapterRepository.putAllSync(siblings);
+        final settings = getIsarSetting()
+          ..chapterPageIndexList = chapterPageIndexs
+          ..updatedAt = now;
+        chap.isRead = isRead;
+        chap.lastPageRead = isRead ? '1' : (newIndex + 1).toString();
+        chap.updatedAt = now;
+        // An asynchronous transaction: the Settings row carries every
+        // chapter's saved page, so this commit grows with the library, and it
+        // runs on page turns.
+        chapterRepository.writeTransactionAsync(() async {
+          await settingsRepository.putAsync(settings);
+          await chapterRepository.putAsync(chap);
+          if (siblings.isNotEmpty) {
+            await chapterRepository.putAllAsync(siblings);
+          }
         });
         onSettingsMutated();
         if (isRead) {

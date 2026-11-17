@@ -119,24 +119,29 @@ class ChapterRepository {
 
   // Stamps updatedAt for callers that just want to persist a mutated Chapter
   // they already hold, without setting the timestamp themselves.
-  Future<void> save(Chapter chapter) => dbWriteQueue.run(() {
-    isar.writeTxnSync(() {
+  //
+  // These run as asynchronous transactions: reading progress, read marks and
+  // history are written while the reader is on screen, and a synchronous
+  // commit held the UI thread for the commit - and for as long as a
+  // background sync held the database's write lock.
+  Future<void> save(Chapter chapter) => dbWriteQueue.run(
+    () => isar.writeTxn(() async {
       chapter.updatedAt = DateTime.now().millisecondsSinceEpoch;
-      isar.chapters.putSync(chapter);
-    });
-  });
+      await isar.chapters.put(chapter);
+    }),
+  );
 
   Future<void> putAll(List<Chapter> chapters) => dbWriteQueue.run(
-    () => isar.writeTxnSync(() => isar.chapters.putAllSync(chapters)),
+    () => isar.writeTxn(() => isar.chapters.putAll(chapters)),
   );
 
   // Same transaction as putAll, plus the parent Manga (e.g. bumping its
   // updatedAt/read state alongside a batch of chapter changes).
   Future<void> putAllWithManga(List<Chapter> chapters, Manga manga) =>
       dbWriteQueue.run(() {
-        isar.writeTxnSync(() {
-          isar.chapters.putAllSync(chapters);
-          isar.mangas.putSync(manga);
+        return isar.writeTxn(() async {
+          await isar.chapters.putAll(chapters);
+          await isar.mangas.put(manga);
         });
       });
 

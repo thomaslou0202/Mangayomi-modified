@@ -52,6 +52,10 @@ class ContinuousNovelReader extends StatefulWidget {
 }
 
 class ContinuousNovelReaderState extends State<ContinuousNovelReader> {
+  /// How many screens before the end of the last loaded chapter the next
+  /// one starts loading in the background.
+  static const _prefetchScreens = 6;
+
   final _viewportKey = GlobalKey();
   final _sectionKeys = <int, GlobalKey>{};
   final _heights = <int, double>{};
@@ -232,6 +236,23 @@ class ContinuousNovelReaderState extends State<ContinuousNovelReader> {
     }
     final lastIndex = _firstIndex + _count - 1;
     final lastId = widget.chapterIds[lastIndex], last = _geometry(lastId);
+    // Start fetching the next chapter well before it is needed: once the
+    // reader is halfway through the last loaded chapter, or within a few
+    // screens of its end. Fetching used to start only 800 px from the end, so
+    // a slow source showed a loading row right where reading continues. The
+    // chapter is still appended at the same point below; this only warms the
+    // cache, and never moves the reading position.
+    if (last != null &&
+        _ready.containsKey(lastId) &&
+        lastIndex <= _activeIndex &&
+        lastIndex + 1 < widget.chapterIds.length) {
+      final viewport = position.viewportDimension;
+      final remaining = last.top + last.height - viewport;
+      final halfway = -last.top >= (last.height - viewport) / 2;
+      if (halfway || remaining < viewport * _prefetchScreens) {
+        _load(widget.chapterIds[lastIndex + 1]);
+      }
+    }
     if (last != null &&
         _ready.containsKey(lastId) &&
         last.top + last.height < position.viewportDimension + 800 &&

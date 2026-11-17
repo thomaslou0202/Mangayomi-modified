@@ -116,13 +116,15 @@ class HistoryRepository {
   // Stamps updatedAt for callers that just want to persist a mutated History
   // they already hold, without setting the timestamp themselves. Also saves
   // its chapter link, since every current caller needs that too.
-  Future<void> save(History history) => dbWriteQueue.run(() {
-    isar.writeTxnSync(() {
+  // Asynchronous for the same reason as ChapterRepository.save: it is written
+  // from the reader, with the page on screen.
+  Future<void> save(History history) => dbWriteQueue.run(
+    () => isar.writeTxn(() async {
       history.updatedAt = DateTime.now().millisecondsSinceEpoch;
-      isar.historys.putSync(history);
-      history.chapter.saveSync();
-    });
-  });
+      await isar.historys.put(history);
+      await history.chapter.save();
+    }),
+  );
 
   Future<void> deleteAll(List<int> ids) =>
       dbWriteQueue.run(() => isar.writeTxn(() => isar.historys.deleteAll(ids)));

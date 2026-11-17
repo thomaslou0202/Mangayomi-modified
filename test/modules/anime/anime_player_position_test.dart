@@ -11,6 +11,7 @@ import 'package:mangayomi/models/settings.dart';
 import 'package:mangayomi/models/source.dart';
 import 'package:mangayomi/models/track.dart';
 import 'package:mangayomi/modules/anime/providers/anime_player_controller_provider.dart';
+import 'package:mangayomi/repositories/db_write_queue.dart';
 
 void main() {
   late Directory databaseDirectory;
@@ -61,7 +62,8 @@ void main() {
           const Duration(minutes: 24),
           save: true,
         );
-    await Future<void>.delayed(Duration.zero);
+    // The episode is saved by a background transaction.
+    await dbWriteQueue.whenIdle();
 
     final saved = await database.chapters.get(episode.id!);
     expect(saved?.lastPageRead, '49000');

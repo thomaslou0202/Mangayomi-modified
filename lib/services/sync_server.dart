@@ -11,6 +11,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
+
 import 'package:crypto/crypto.dart';
 import 'package:mangayomi/services/external_browser.dart';
 import 'package:mangayomi/services/background_work/background_work.dart';
@@ -358,19 +360,7 @@ class SyncServer extends _$SyncServer {
       final sum = totalCounts.values.fold<int>(0, (a, b) => a + (b as int));
       progress.addTotal(sum);
     }
-    const pagedKeys = [
-      'categories',
-      'manga',
-      'chapters',
-      'tracks',
-      'histories',
-      'updates',
-    ];
-    final pageRows = pagedKeys.fold<int>(
-      0,
-      (a, key) => a + ((response[key] as List?)?.length ?? 0),
-    );
-    progress.addDone(pageRows);
+    progress.addDone(syncResponseRowCount(response));
   }
 
   // ------------------------------------------------------------------
@@ -482,4 +472,34 @@ Future<void> autoSyncIfDue(dynamic ref, {int syncId = 1}) async {
   await ref
       .read(syncServerProvider(syncId: syncId).notifier)
       .startSync(null, true);
+}
+
+/// Rows one sync response carries, counted the way the server's totalCounts
+/// counts them: every pulled entity page plus the deletions.
+///
+/// totalCounts includes the deletions, which arrive grouped by entity under
+/// `tombstones`. Leaving them out kept the progress bar short of 100 % (it
+/// stalled in the 90s) on any sync that carried deletions.
+@visibleForTesting
+int syncResponseRowCount(Map<String, dynamic> response) {
+  const pagedKeys = [
+    'categories',
+    'manga',
+    'chapters',
+    'tracks',
+    'histories',
+    'updates',
+  ];
+  final pageRows = pagedKeys.fold<int>(
+    0,
+    (a, key) => a + ((response[key] as List?)?.length ?? 0),
+  );
+  final tombstones = response['tombstones'];
+  final deletedRows = tombstones is Map
+      ? tombstones.values.fold<int>(
+          0,
+          (a, ids) => a + (ids is List ? ids.length : 0),
+        )
+      : 0;
+  return pageRows + deletedRows;
 }

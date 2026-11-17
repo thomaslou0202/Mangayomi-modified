@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:async';
 import 'dart:io';
 
@@ -28,6 +29,11 @@ mixin ReaderPrefetchMixin<T extends ConsumerStatefulWidget>
   Timer? evictionAndPrefetchDebounce;
 
   int get pagePreloadAmount => ref.read(pagePreloadAmountStateProvider);
+
+  /// How many pages before the end of the loaded pages the next chapter
+  /// starts loading. Well ahead of the image preload window, so a slow source
+  /// has the next chapter's page list ready before the reader gets there.
+  int get nextChapterPreloadDistance => math.max(pagePreloadAmount * 3, 20);
 
   Chapter get activeChapterForPrefetch;
   ReaderController get activeReaderControllerForPrefetch;

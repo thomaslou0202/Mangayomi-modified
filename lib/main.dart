@@ -96,6 +96,10 @@ void main(List<String> args) async {
           'FlutterError: ${details.exceptionAsString()}\n${details.stack}',
           logLevel: LogLevel.error,
         );
+        // A cover or icon that fails to download is the site's doing, not a
+        // fault in the app, and a page of them buried real reports. They stay
+        // in the log above.
+        if (isImageLoadFailure(details)) return;
         CrashReports.record(
           source: 'FlutterError',
           error: details.exceptionAsString(),

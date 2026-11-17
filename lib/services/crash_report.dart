@@ -5,6 +5,12 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
+/// Whether [details] is an image that failed to load: a cover or source icon
+/// the site would not serve. Flutter reports those through the image resource
+/// service; they are the site's doing, not the app's.
+bool isImageLoadFailure(FlutterErrorDetails details) =>
+    details.library == 'image resource service';
+
 /// One error the app caught and kept so it can be reported later.
 ///
 /// This is deliberately small. It holds what a maintainer needs to act on an

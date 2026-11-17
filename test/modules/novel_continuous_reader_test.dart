@@ -38,7 +38,7 @@ void main() {
   }
 
   testWidgets(
-    'appends one chapter with a compact separator and no early history switch',
+    'prefetches the next chapter early, appends it near the end, no early history switch',
     (tester) async {
       final scroll = ScrollController(), positions = <NovelChapterPosition>[];
       final next = Completer<NovelChapterText>(), calls = <int>[];
@@ -51,7 +51,11 @@ void main() {
         },
         positions: positions,
       );
-      expect(calls, isEmpty);
+      // The next chapter starts loading in the background straight away (a
+      // short chapter is already within a few screens of its end), but it is
+      // not appended until the reader nears the end.
+      expect(calls, [2]);
+      expect(find.byKey(const ValueKey('chapter-separator-2')), findsNothing);
       scroll.jumpTo(1500);
       await tester.pump();
       await tester.pump();
@@ -211,4 +215,42 @@ void main() {
       scroll.dispose();
     },
   );
+
+  testWidgets('a long chapter starts loading the next one halfway through', (
+    tester,
+  ) async {
+    final scroll = ScrollController(), calls = <int>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ContinuousNovelReader(
+            chapterIds: const [1, 2, 3],
+            initial: const NovelChapterText(id: 1, html: '第一章'),
+            controller: scroll,
+            loadChapter: (id) {
+              calls.add(id);
+              return Completer<NovelChapterText>().future;
+            },
+            retryLabel: '重試',
+            onPosition: (_) {},
+            contentBuilder: (context, entry) =>
+                SizedBox(height: 20000, child: Text('正文 ${entry.id}')),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(calls, isEmpty, reason: 'far from the end, nothing to fetch yet');
+    scroll.jumpTo(5000);
+    await tester.pump();
+    await tester.pump();
+    expect(calls, isEmpty);
+    scroll.jumpTo(10500);
+    await tester.pump();
+    await tester.pump();
+    expect(calls, [2], reason: 'halfway through: fetch in the background');
+    expect(find.byKey(const ValueKey('chapter-separator-2')), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+    scroll.dispose();
+  });
 }
