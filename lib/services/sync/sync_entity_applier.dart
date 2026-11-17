@@ -398,7 +398,69 @@ Settings _preserveDeviceLocalSettings(Settings incoming, Settings current) {
     ..androidProxyServer = current.androidProxyServer
     ..jrePath = current.jrePath
     ..extensionServerPath = current.extensionServerPath
-    ..updatesLastSeenAt = current.updatesLastSeenAt;
+    ..updatesLastSeenAt = current.updatesLastSeenAt
+    // Library filters, sorting and layout belong to the device. Settings sync
+    // as one row and the newest row wins - and reading on another device
+    // bumps it - so a phone's filters used to replace this device's on the
+    // next sync, which looked like filters resetting at random.
+    ..displayType = current.displayType
+    ..libraryFilterMangasDownloadType = current.libraryFilterMangasDownloadType
+    ..libraryFilterMangasUnreadType = current.libraryFilterMangasUnreadType
+    ..libraryFilterMangasStartedType = current.libraryFilterMangasStartedType
+    ..libraryFilterMangasBookMarkedType =
+        current.libraryFilterMangasBookMarkedType
+    ..libraryFilterMangasCompletedType =
+        current.libraryFilterMangasCompletedType
+    ..libraryFilterMangasTrackingType = current.libraryFilterMangasTrackingType
+    ..libraryFilterMangasSourceIds = current.libraryFilterMangasSourceIds
+    ..libraryShowCategoryTabs = current.libraryShowCategoryTabs
+    ..libraryDownloadedChapters = current.libraryDownloadedChapters
+    ..libraryShowLanguage = current.libraryShowLanguage
+    ..libraryShowNumbersOfItems = current.libraryShowNumbersOfItems
+    ..libraryShowContinueReadingButton =
+        current.libraryShowContinueReadingButton
+    ..libraryLocalSource = current.libraryLocalSource
+    ..sortLibraryManga = current.sortLibraryManga
+    ..animeDisplayType = current.animeDisplayType
+    ..libraryFilterAnimeDownloadType = current.libraryFilterAnimeDownloadType
+    ..libraryFilterAnimeUnreadType = current.libraryFilterAnimeUnreadType
+    ..libraryFilterAnimeStartedType = current.libraryFilterAnimeStartedType
+    ..libraryFilterAnimeBookMarkedType =
+        current.libraryFilterAnimeBookMarkedType
+    ..libraryFilterAnimeCompletedType = current.libraryFilterAnimeCompletedType
+    ..libraryFilterAnimeTrackingType = current.libraryFilterAnimeTrackingType
+    ..libraryFilterAnimeSourceIds = current.libraryFilterAnimeSourceIds
+    ..animeLibraryShowCategoryTabs = current.animeLibraryShowCategoryTabs
+    ..animeLibraryDownloadedChapters = current.animeLibraryDownloadedChapters
+    ..animeLibraryShowLanguage = current.animeLibraryShowLanguage
+    ..animeLibraryShowNumbersOfItems = current.animeLibraryShowNumbersOfItems
+    ..animeLibraryShowContinueReadingButton =
+        current.animeLibraryShowContinueReadingButton
+    ..animeLibraryLocalSource = current.animeLibraryLocalSource
+    ..sortLibraryAnime = current.sortLibraryAnime
+    ..novelDisplayType = current.novelDisplayType
+    ..libraryFilterNovelDownloadType = current.libraryFilterNovelDownloadType
+    ..libraryFilterNovelUnreadType = current.libraryFilterNovelUnreadType
+    ..libraryFilterNovelStartedType = current.libraryFilterNovelStartedType
+    ..libraryFilterNovelBookMarkedType =
+        current.libraryFilterNovelBookMarkedType
+    ..libraryFilterNovelCompletedType = current.libraryFilterNovelCompletedType
+    ..libraryFilterNovelTrackingType = current.libraryFilterNovelTrackingType
+    ..libraryFilterNovelSourceIds = current.libraryFilterNovelSourceIds
+    ..novelLibraryShowCategoryTabs = current.novelLibraryShowCategoryTabs
+    ..novelLibraryDownloadedChapters = current.novelLibraryDownloadedChapters
+    ..novelLibraryShowLanguage = current.novelLibraryShowLanguage
+    ..novelLibraryShowNumbersOfItems = current.novelLibraryShowNumbersOfItems
+    ..novelLibraryShowContinueReadingButton =
+        current.novelLibraryShowContinueReadingButton
+    ..novelLibraryLocalSource = current.novelLibraryLocalSource
+    ..sortLibraryNovel = current.sortLibraryNovel
+    // Per-title chapter sorting and filters are keyed by this device's local
+    // manga ids, which mean other titles on another device.
+    ..sortChapterList = current.sortChapterList
+    ..chapterFilterDownloadedList = current.chapterFilterDownloadedList
+    ..chapterFilterUnreadList = current.chapterFilterUnreadList
+    ..chapterFilterBookmarkedList = current.chapterFilterBookmarkedList;
 }
 
 class _MangaChapterRemaps {

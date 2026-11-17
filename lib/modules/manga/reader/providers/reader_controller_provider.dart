@@ -149,21 +149,6 @@ class ReaderController extends _$ReaderController
     if (isRead || save) {
       void executeSave() {
         if (chapter.isRead! || incognitoMode) return;
-        List<ChapterPageIndex>? chapterPageIndexs = [];
-        for (var chapterPageIndex
-            in getIsarSetting().chapterPageIndexList ?? []) {
-          if (chapterPageIndex.chapterId != chapter.id &&
-              (chapterPageIndex.index ?? 0) > 0) {
-            chapterPageIndexs.add(chapterPageIndex);
-          }
-        }
-        if (!isRead && newIndex > 0) {
-          chapterPageIndexs.add(
-            ChapterPageIndex()
-              ..chapterId = chapter.id
-              ..index = newIndex,
-          );
-        }
         if (!ref.mounted) return;
         final autoReadDuplChap = ref.read(
           autoReadDuplicateChaptersStateProvider,
@@ -193,16 +178,32 @@ class ReaderController extends _$ReaderController
           }
         }
         final chap = chapter;
-        final settings = getIsarSetting()
-          ..chapterPageIndexList = chapterPageIndexs
-          ..updatedAt = now;
+        final chapterId = chapter.id;
+        final keepPage = !isRead && newIndex > 0;
         chap.isRead = isRead;
         chap.lastPageRead = isRead ? '1' : (newIndex + 1).toString();
         chap.updatedAt = now;
         // An asynchronous transaction: the Settings row carries every
         // chapter's saved page, so this commit grows with the library, and it
-        // runs on page turns.
+        // runs on page turns. The row is read inside the transaction: writing
+        // back a copy taken before it waited its turn would undo whatever was
+        // saved in between (a library filter changed meanwhile, say).
         chapterRepository.writeTransactionAsync(() async {
+          final settings =
+              await settingsRepository.currentAsync ?? getIsarSetting();
+          settings
+            ..chapterPageIndexList = [
+              for (final saved
+                  in settings.chapterPageIndexList ??
+                      const <ChapterPageIndex>[])
+                if (saved.chapterId != chapterId && (saved.index ?? 0) > 0)
+                  saved,
+              if (keepPage)
+                ChapterPageIndex()
+                  ..chapterId = chapterId
+                  ..index = newIndex,
+            ]
+            ..updatedAt = now;
           await settingsRepository.putAsync(settings);
           await chapterRepository.putAsync(chap);
           if (siblings.isNotEmpty) {
