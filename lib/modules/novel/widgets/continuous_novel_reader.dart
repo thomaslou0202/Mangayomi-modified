@@ -56,12 +56,21 @@ class ContinuousNovelReaderState extends State<ContinuousNovelReader> {
   /// one starts loading in the background.
   static const _prefetchScreens = 6;
 
+  /// How many finished chapters stay above the current one. Earlier ones
+  /// leave the list: kept, the list only grew, the scrollbar thumb shrank to
+  /// a sliver after a few chapters, and every chapter read stayed in memory.
+  static const _keepBehind = 2;
+
   final _viewportKey = GlobalKey();
   final _sectionKeys = <int, GlobalKey>{};
   final _heights = <int, double>{};
   final _cache = <int, Future<NovelChapterText>>{};
   final _ready = <int, NovelChapterText>{};
   late int _firstIndex;
+
+  /// The chapter the reader opened on; the only one drawn without a
+  /// separator above it.
+  late int _initialIndex;
   int _count = 1;
   int _activeIndex = 0;
   bool _scheduled = false;
@@ -71,12 +80,27 @@ class ContinuousNovelReaderState extends State<ContinuousNovelReader> {
   bool _advancedSinceMeasure = false;
   bool _positionChangedSinceMeasure = false;
 
+  /// The saved progress being restored, kept until the reader scrolls.
+  ///
+  /// The opening chapter's height keeps changing after its first layout
+  /// (pictures arriving, the HTML finishing its layout). Seeking once, against
+  /// the first height, put the reader at the wrong place: too far down when
+  /// the chapter then shrank, too far up when it grew. So the seek is redone
+  /// whenever the height changes, until the reader moves on their own.
+  double? _restoreProgress;
+  double? _restorePixels;
+  double? _restoreHeight;
+
   int get cachedBodyCount => _cache.length;
+
+  /// Chapters currently in the scroll list.
+  int get chaptersInList => _count;
 
   @override
   void initState() {
     super.initState();
     _firstIndex = widget.chapterIds.indexOf(widget.initial.id);
+    _initialIndex = _firstIndex;
     assert(
       _firstIndex >= 0 &&
           widget.chapterIds.toSet().length == widget.chapterIds.length,
@@ -160,9 +184,16 @@ class ContinuousNovelReaderState extends State<ContinuousNovelReader> {
   }
 
   void seek(double progress) {
-    if (!widget.controller.hasClients) return;
+    // A seek from outside (the progress slider, TTS) replaces any restore.
+    _restoreProgress = null;
+    _seek(progress);
+  }
+
+  /// Jumps to [progress] through the active chapter; returns its height then.
+  double? _seek(double progress) {
+    if (!widget.controller.hasClients) return null;
     final id = widget.chapterIds[_activeIndex], geometry = _geometry(id);
-    if (geometry == null) return;
+    if (geometry == null) return null;
     final position = widget.controller.position;
     final start = position.pixels + geometry.top;
     final extent = math.max(0.0, geometry.height - position.viewportDimension);
@@ -173,6 +204,37 @@ class ContinuousNovelReaderState extends State<ContinuousNovelReader> {
       ),
     );
     _scheduleMeasure();
+    return geometry.height;
+  }
+
+  void _restore(double progress) {
+    _restoreProgress = progress;
+    _restoreHeight = _seek(progress);
+    _restorePixels = widget.controller.hasClients
+        ? widget.controller.position.pixels
+        : null;
+  }
+
+  /// Redoes the restore when the opening chapter changed height, as long as
+  /// the reader has not scrolled since. Returns whether it seeked.
+  bool _keepRestored() {
+    final progress = _restoreProgress;
+    if (progress == null || !widget.controller.hasClients) return false;
+    final geometry = _geometry(widget.chapterIds[_activeIndex]);
+    if (geometry == null) return false;
+    // The chapter changed height (its layout settled, pictures came in): the
+    // scroll position may have been clamped along with it, so seek again.
+    if ((geometry.height - (_restoreHeight ?? 0)).abs() >= 1) {
+      _restore(progress);
+      return true;
+    }
+    // Same height but a different position: the reader (or auto-scroll)
+    // moved, and from here their position wins.
+    final pixels = widget.controller.position.pixels;
+    if (_restorePixels == null || (pixels - _restorePixels!).abs() > 1) {
+      _restoreProgress = null;
+    }
+    return false;
   }
 
   void _measure() {
@@ -211,10 +273,11 @@ class ContinuousNovelReaderState extends State<ContinuousNovelReader> {
     if (!_restored && _ready.containsKey(widget.initial.id)) {
       _restored = true;
       if (widget.initialProgress > 0) {
-        seek(widget.initialProgress);
+        _restore(widget.initialProgress);
         return;
       }
     }
+    if (_keepRestored()) return;
     if (visible != null) {
       _activeIndex = visible;
       final id = widget.chapterIds[visible], geometry = _geometry(id)!;
@@ -227,7 +290,7 @@ class ContinuousNovelReaderState extends State<ContinuousNovelReader> {
           content: _ready[id]!,
           offset:
               geometry.height <= position.viewportDimension &&
-                  (advanced || visible != _firstIndex)
+                  (advanced || visible != _initialIndex)
               ? extent
               : (-geometry.top).clamp(0.0, extent),
           extent: extent,
@@ -262,6 +325,29 @@ class ContinuousNovelReaderState extends State<ContinuousNovelReader> {
       _load(next);
       setState(() => _count++);
     }
+    _dropFinishedChapters(position);
+  }
+
+  /// Takes the oldest chapter out of the list once it is well behind the
+  /// reader and off screen, keeping the reading position where it is.
+  void _dropFinishedChapters(ScrollPosition position) {
+    if (_activeIndex - _firstIndex <= _keepBehind || _count <= 1) return;
+    final firstId = widget.chapterIds[_firstIndex];
+    // Far above the screen the list no longer builds it, so its height is the
+    // one measured while it was on screen.
+    final first = _geometry(firstId);
+    if (first != null && first.top + first.height > 0) return;
+    final height = first?.height ?? _heights[firstId];
+    if (height == null) return;
+    // Everything below moves up by the removed height; move the scroll
+    // position with it so the text on screen does not jump.
+    final pixels = position.pixels - height;
+    position.correctPixels(pixels);
+    _lastPixels = pixels;
+    setState(() {
+      _firstIndex++;
+      _count--;
+    });
   }
 
   @override
@@ -293,7 +379,7 @@ class ContinuousNovelReaderState extends State<ContinuousNovelReader> {
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          if (index > 0)
+                          if (_firstIndex + index > _initialIndex)
                             Padding(
                               key: ValueKey('chapter-separator-$id'),
                               padding: const EdgeInsets.symmetric(
@@ -322,7 +408,10 @@ class ContinuousNovelReaderState extends State<ContinuousNovelReader> {
                                   ? MediaQuery.sizeOf(context).height * 0.7
                                   : math.max(
                                       1.0,
-                                      _heights[id]! - (index > 0 ? 35 : 0),
+                                      _heights[id]! -
+                                          (_firstIndex + index > _initialIndex
+                                              ? 35
+                                              : 0),
                                     ),
                               child: Center(
                                 child: snapshot.hasError
