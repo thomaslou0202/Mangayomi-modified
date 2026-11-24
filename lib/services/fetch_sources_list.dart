@@ -9,6 +9,7 @@ import 'package:mangayomi/models/manga.dart';
 import 'package:mangayomi/models/settings.dart';
 import 'package:mangayomi/models/source.dart';
 import 'package:mangayomi/services/http/m_client.dart';
+import 'package:mangayomi/utils/headers.dart';
 import 'package:mangayomi/services/isolate_service.dart';
 import 'package:mangayomi/services/extension_store_service.dart';
 import 'package:mangayomi/services/extension_update.dart';
@@ -362,6 +363,8 @@ Future<void> updateSource(
     ..updatedAt = DateTime.now().millisecondsSinceEpoch;
 
   await sourceRepository.save(updatedSource);
+  // Its headers may have changed with its code.
+  clearSourceHeadersCache();
 }
 
 Future<void> _addNewSource(Source source, Repo? repo, ItemType itemType) async {

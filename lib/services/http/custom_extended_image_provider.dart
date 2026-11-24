@@ -635,7 +635,9 @@ class CustomExtendedNetworkImageProvider
         timeRetry == other.timeRetry &&
         cache == other.cache &&
         cacheKey == other.cacheKey &&
-        //headers == other.headers &&
+        // By content: a source's headers can arrive after its covers were
+        // first drawn, and a cover that failed without them must load again.
+        mapEquals(headers, other.headers) &&
         retries == other.retries &&
         imageCacheName == other.imageCacheName &&
         cacheMaxAge == other.cacheMaxAge;
@@ -651,7 +653,11 @@ class CustomExtendedNetworkImageProvider
     timeRetry,
     cache,
     cacheKey,
-    //headers,
+    headers == null
+        ? null
+        : Object.hashAllUnordered(
+            headers!.entries.map((e) => Object.hash(e.key, e.value)),
+          ),
     retries,
     imageCacheName,
     cacheMaxAge,

@@ -2,18 +2,29 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:mangayomi/eval/http_response_extensions.dart';
-import 'package:mangayomi/eval/lib.dart';
 import 'package:mangayomi/providers/general_state_provider.dart';
 import 'package:mangayomi/models/source.dart';
+import 'package:mangayomi/services/isolate_service.dart';
 import 'package:mangayomi/services/source_code_errors.dart';
 import 'package:mangayomi/utils/utils.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 part 'headers.g.dart';
 
-/// Headers are static per source version, but computing them spins up a full
-/// JS/Dart extension runtime. Cache them so widget builds never pay that cost.
-final _sourceHeadersCache = <String, Map<String, String>>{};
+/// Headers per source, keyed by the provider's arguments.
+///
+/// Working them out runs the whole extension, and finding the source reads
+/// every installed source (code and all) from the database. Both used to
+/// happen on the UI thread whenever covers of a source were first drawn, and
+/// again after the provider had been idle for a while, which is what made
+/// switching library categories or tabs stall. Now a source is looked up once,
+/// its stored headers are used straight away, and the extension's own headers
+/// are worked out in the extension pool and filled in when they arrive.
+final _sourceHeadersCache =
+    <String, ({bool mihon, Map<String, String> headers})>{};
+
+/// Forgets every source's headers, after an extension was installed or updated.
+void clearSourceHeadersCache() => _sourceHeadersCache.clear();
 
 @riverpod
 Map<String, String> headers(
@@ -33,37 +44,54 @@ Map<String, String> headers(
   });
   ref.onResume(() => timer?.cancel());
   ref.onDispose(() => timer?.cancel());
-  final mSource = getSource(lang, source, sourceId, installedOnly: true);
 
-  if (mSource == null) return {};
-
-  final cacheKey =
-      '${mSource.id}|${mSource.version}|${mSource.sourceCode?.hashCode}|$androidProxyServer';
-  final base = _sourceHeadersCache.putIfAbsent(cacheKey, () {
-    final headers = <String, String>{};
+  final cacheKey = '$lang|$source|$sourceId|$androidProxyServer';
+  var entry = _sourceHeadersCache[cacheKey];
+  if (entry == null) {
+    final mSource = getSource(lang, source, sourceId, installedOnly: true);
+    if (mSource == null) return {};
+    final stored = <String, String>{};
     // A source whose code will not run (empty, broken, half installed) has
     // no headers of its own, but its covers still load: before, the error
     // reached every cover of it, and the calendar failed to build.
     try {
       final fromSource = mSource.headers;
       if (fromSource != null && fromSource.isNotEmpty) {
-        headers.addAll((jsonDecode(fromSource) as Map).toMapStringString!);
-      }
-      final service = getExtensionService(mSource, androidProxyServer);
-      try {
-        headers.addAll(service.getHeaders());
-      } finally {
-        service.dispose();
+        stored.addAll((jsonDecode(fromSource) as Map).toMapStringString!);
       }
     } catch (e, stack) {
       SourceCodeErrors.report(mSource, 'Headers', e, stack);
     }
-    return headers;
-  });
+    entry = (
+      mihon: mSource.sourceCodeLanguage == SourceCodeLanguage.mihon,
+      headers: stored,
+    );
+    _sourceHeadersCache[cacheKey] = entry;
+    unawaited(
+      getIsolateService
+          .get<Map<String, String>>(
+            source: mSource,
+            serviceType: 'getHeaders',
+            proxyServer: androidProxyServer,
+          )
+          .then(
+            (fromExtension) {
+              if (fromExtension.isEmpty) return;
+              _sourceHeadersCache[cacheKey] = (
+                mihon: entry!.mihon,
+                headers: {...stored, ...fromExtension},
+              );
+              if (ref.mounted) ref.invalidateSelf();
+            },
+            onError: (Object e, StackTrace stack) =>
+                SourceCodeErrors.report(mSource, 'Headers', e, stack),
+          ),
+    );
+  }
 
-  if (mSource.sourceCodeLanguage != SourceCodeLanguage.mihon) return base;
+  if (!entry.mihon) return entry.headers;
 
-  final headers = Map<String, String>.of(base);
+  final headers = Map<String, String>.of(entry.headers);
   headers['user-agent'] = ref.watch(userAgentStateProvider);
   return headers;
 }
