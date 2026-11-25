@@ -29,7 +29,35 @@ class UpdateAsset {
   final String url;
   final int size;
 
-  const UpdateAsset(this.url, {this.size = 0});
+  /// Lower-case hex SHA-256 GitHub publishes for the file, when it does.
+  final String? sha256;
+
+  const UpdateAsset(this.url, {this.size = 0, this.sha256});
+}
+
+/// The hex digest of GitHub's `"sha256:<hex>"` asset digest, or null.
+String? sha256OfDigest(Object? digest) {
+  if (digest is! String) return null;
+  final match = RegExp(r'^sha256:([0-9a-fA-F]{64})$').firstMatch(digest.trim());
+  return match?.group(1)!.toLowerCase();
+}
+
+/// The assets of a GitHub release worth offering: only when [parseAppRelease]
+/// accepts it (a finished, stable release of our repository) and only the
+/// files it names, with their size and digest. Null when it is not one.
+List<UpdateAsset>? releaseUpdateAssets(Map<String, dynamic> release) {
+  final parsed = parseAppRelease(release);
+  if (parsed == null) return null;
+  final accepted = parsed.$4.toSet();
+  return [
+    for (final asset in (release['assets'] as List).whereType<Map>())
+      if (accepted.contains(asset['browser_download_url']))
+        UpdateAsset(
+          asset['browser_download_url'] as String,
+          size: (asset['size'] as num).toInt(),
+          sha256: sha256OfDigest(asset['digest']),
+        ),
+  ];
 }
 
 /// A release newer than the running version.
@@ -168,12 +196,10 @@ Future<UpdateInfo?> _fetchLatestRelease() async {
 
     final body = (release['body'] as String?) ?? '';
     final htmlUrl = (release['html_url'] as String?) ?? '';
-    final rawAssets = release['assets'] as List<dynamic>? ?? [];
-    final assets = <UpdateAsset>[
-      for (final asset in rawAssets.cast<Map<String, dynamic>>())
-        if (asset['browser_download_url'] case final Object url)
-          UpdateAsset('$url', size: (asset['size'] as num?)?.toInt() ?? 0),
-    ];
+    // Drafts, previews, other repositories and half-uploaded files are not
+    // offered: this used to take any asset of whatever the API returned.
+    final assets = releaseUpdateAssets(release);
+    if (assets == null) return null;
 
     return UpdateInfo(
       version: cleanVersion,

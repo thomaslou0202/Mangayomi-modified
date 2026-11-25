@@ -549,7 +549,7 @@ class _NovelWebViewState extends ConsumerState<NovelWebView>
                                       if (showTts && tts.paragraph >= 0) {
                                         final result = NovelTtsService.instance
                                             .highlightHtml(
-                                              data.$1,
+                                              activeData.$1,
                                               tts.paragraph,
                                               wordStart: tts.wordStart,
                                               wordEnd: tts.wordEnd,

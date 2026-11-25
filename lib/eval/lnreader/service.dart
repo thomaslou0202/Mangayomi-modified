@@ -29,6 +29,18 @@ JavascriptRuntime getJavascriptRuntime({
   return runtime;
 }
 
+/// Frees a runtime from [getJavascriptRuntime]: the QuickJS engine (native
+/// memory, several MB with a source loaded) and the message handlers the
+/// runtime registers in a static map, which hold on to the service and its
+/// source code. Services used to drop the runtime without this, and the
+/// worker makes a service per request, so the engines piled up.
+void disposeJsRuntime(JavascriptRuntime runtime) {
+  JavascriptRuntime.channelFunctionsRegistered.remove(
+    runtime.getEngineInstanceId(),
+  );
+  runtime.dispose();
+}
+
 class LNReaderExtensionService implements ExtensionService {
   late JavascriptRuntime runtime;
   @override
@@ -185,6 +197,7 @@ const extension = exports.default;
   void dispose() {
     if (!_isInitialized) return;
     _jsCheerio.dispose();
+    disposeJsRuntime(runtime);
     _isInitialized = false;
   }
 

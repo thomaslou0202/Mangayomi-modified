@@ -38,32 +38,65 @@ String? customDns;
 class MClient {
   MClient();
   static final defaultClient = IOClient(HttpClient());
-  static final Map<rhttp.ClientSettings, Client> rhttpPool = {};
+  // One Rust client per distinct configuration. It used to be keyed by the
+  // ClientSettings object itself, which has no ==, so every request built a
+  // fresh key, missed, and created (and kept) another native client.
+  static final Map<(Object, String), Client> rhttpPool = {};
+
+  static rhttp.ClientSettings _defaultSettings(
+    Map<String, dynamic>? reqcopyWith,
+  ) => rhttp.ClientSettings(
+    throwOnStatusCode: false,
+    proxySettings: reqcopyWith?["noProxy"] ?? false
+        ? const rhttp.ProxySettings.noProxy()
+        : null,
+    timeout: reqcopyWith?["timeout"] != null
+        ? Duration(seconds: reqcopyWith?["timeout"])
+        : null,
+    timeoutSettings: TimeoutSettings(
+      connectTimeout: reqcopyWith?["connectTimeout"] != null
+          ? Duration(seconds: reqcopyWith?["connectTimeout"])
+          : null,
+    ),
+    tlsSettings: rhttp.TlsSettings(
+      verifyCertificates: reqcopyWith?["verifyCertificates"] ?? false,
+    ),
+  );
+
+  /// What [_defaultSettings] reads from [reqcopyWith], as a pool key.
+  static String _defaultSettingsKey(Map<String, dynamic>? reqcopyWith) => [
+    reqcopyWith?["noProxy"] ?? false,
+    reqcopyWith?["timeout"],
+    reqcopyWith?["connectTimeout"],
+    reqcopyWith?["verifyCertificates"] ?? false,
+  ].join('|');
+
+  /// [settings] given by a caller are pooled by identity (callers pass const
+  /// instances). [dnsSettings] carry a resolver closure that cannot be
+  /// compared, so [dnsKey] names what it resolves with.
   static Client httpClient({
     Map<String, dynamic>? reqcopyWith,
     rhttp.ClientSettings? settings,
+    DnsSettings? dnsSettings,
+    String dnsKey = '',
   }) {
     if (!(reqcopyWith?["useDartHttpClient"] ?? false)) {
       try {
-        settings ??= rhttp.ClientSettings(
-          throwOnStatusCode: false,
-          proxySettings: reqcopyWith?["noProxy"] ?? false
-              ? const rhttp.ProxySettings.noProxy()
-              : null,
-          timeout: reqcopyWith?["timeout"] != null
-              ? Duration(seconds: reqcopyWith?["timeout"])
-              : null,
-          timeoutSettings: TimeoutSettings(
-            connectTimeout: reqcopyWith?["connectTimeout"] != null
-                ? Duration(seconds: reqcopyWith?["connectTimeout"])
-                : null,
-          ),
-          tlsSettings: rhttp.TlsSettings(
-            verifyCertificates: reqcopyWith?["verifyCertificates"] ?? false,
-          ),
+        final key = (
+          settings ?? _defaultSettingsKey(reqcopyWith),
+          dnsSettings == null ? '' : dnsKey,
         );
-        return rhttpPool.putIfAbsent(settings, () {
-          return rhttp.RhttpCompatibleClient.createSync(settings: settings);
+        return rhttpPool.putIfAbsent(key, () {
+          var clientSettings = settings ?? _defaultSettings(reqcopyWith);
+          // Added on top of the defaults: the DoH and custom DNS paths used
+          // to replace them, dropping throwOnStatusCode: false, timeouts,
+          // proxy and certificate settings.
+          if (dnsSettings != null) {
+            clientSettings = clientSettings.copyWith(dnsSettings: dnsSettings);
+          }
+          return _SharedClient(
+            rhttp.RhttpCompatibleClient.createSync(settings: clientSettings),
+          );
         });
       } catch (_) {}
     }
@@ -82,33 +115,37 @@ class MClient {
     final doHProviderId = appSettings?.doHProviderId;
 
     DnsSettings? dnsSettings;
+    var dnsKey = '';
 
     if (useDoH && doHProviderId != null) {
       // Use DoH resolver with the selected provider — either a preset or, when
       // the custom sentinel id is set, one built from the user's saved URL.
+      final customUrl = DohCustomStore.url.trim();
       final provider = doHProviderId == DoHProviders.customId
-          ? (DohCustomStore.url.trim().isNotEmpty
-                ? DoHProviders.custom(DohCustomStore.url.trim())
-                : null)
+          ? (customUrl.isNotEmpty ? DoHProviders.custom(customUrl) : null)
           : DoHProviders.byId[doHProviderId];
       if (provider != null) {
         dnsSettings = DnsSettings.dynamic(
           resolver: (host) => DoHResolver.resolve(host, provider: provider),
         );
+        dnsKey = doHProviderId == DoHProviders.customId
+            ? 'doh:custom:$customUrl'
+            : 'doh:$doHProviderId';
       }
     } else if (customDns != null && customDns!.trim().isNotEmpty) {
       // Fallback to custom static DNS
-      dnsSettings = DnsSettings.dynamic(resolver: (host) async => [customDns!]);
+      final dns = customDns!;
+      dnsSettings = DnsSettings.dynamic(resolver: (host) async => [dns]);
+      dnsKey = 'static:$dns';
     }
 
-    // Apply DNS settings if configured
-    final clientSettings = dnsSettings != null
-        ? settings?.copyWith(dnsSettings: dnsSettings) ??
-              ClientSettings(dnsSettings: dnsSettings)
-        : settings;
-
     return InterceptedClient.build(
-      client: httpClient(settings: clientSettings, reqcopyWith: reqcopyWith),
+      client: httpClient(
+        settings: settings,
+        reqcopyWith: reqcopyWith,
+        dnsSettings: dnsSettings,
+        dnsKey: dnsKey,
+      ),
       retryPolicy: ResolveCloudFlareChallenge(showCloudFlareError),
       interceptors: [
         MCookieManager(reqcopyWith, useDefaultUserAgent: useDefaultUserAgent),
@@ -852,4 +889,19 @@ Future<void> _evaluateJavascriptViaWebview(HttpRequest request) async {
       ..write(jsonEncode({'error': 'Invalid JSON'}))
       ..close();
   }
+}
+
+/// A pooled client handed to many callers. Some close what they were given
+/// (Dart extensions' Client.close, a few extractors); that must not shut the
+/// shared native client for everyone else, so close() does nothing here.
+class _SharedClient extends http.BaseClient {
+  _SharedClient(this._inner);
+  final http.Client _inner;
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) =>
+      _inner.send(request);
+
+  @override
+  void close() {}
 }

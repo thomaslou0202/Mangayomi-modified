@@ -9,6 +9,7 @@ import 'package:mangayomi/eval/javascript/extractors.dart';
 import 'package:mangayomi/eval/javascript/http.dart';
 import 'package:mangayomi/eval/javascript/preferences.dart';
 import 'package:mangayomi/eval/javascript/utils.dart';
+import 'package:mangayomi/eval/lnreader/service.dart' show disposeJsRuntime;
 import 'package:mangayomi/eval/model/filter.dart';
 import 'package:mangayomi/eval/model/m_manga.dart';
 import 'package:mangayomi/eval/model/m_pages.dart';
@@ -90,12 +91,18 @@ async function jsonStringify(fn) {
     // later call answered its default. That is what "Video list is empty"
     // was: not an empty list from the source, but a source that never loaded.
     // See #873.
-    _throwIfError(
-      runtime.evaluate('''${source.sourceCode}
+    try {
+      _throwIfError(
+        runtime.evaluate('''${source.sourceCode}
 var extention = new DefaultExtension();
 '''),
-      'loading the source',
-    );
+        'loading the source',
+      );
+    } catch (_) {
+      // Not initialized, so dispose() would skip it: free it here.
+      disposeJsRuntime(runtime);
+      rethrow;
+    }
     _isInitialized = true;
   }
 
@@ -103,6 +110,7 @@ var extention = new DefaultExtension();
   void dispose() {
     if (!_isInitialized) return;
     _jsDomSelector.dispose();
+    disposeJsRuntime(runtime);
     _isInitialized = false;
   }
 

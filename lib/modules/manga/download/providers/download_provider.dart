@@ -371,17 +371,15 @@ Future<void> _downloadChapter(
     // a recorded failure or after a timeout so a bad/unmatched URL surfaces an
     // error instead of a silent, endless stall.
     final startDeadline = DateTime.now().add(const Duration(seconds: 45));
-    await Future.doWhile(() async {
-      await Future.delayed(const Duration(seconds: 1));
-      if (isOk == true || startFailure != null) {
-        return false;
-      }
+    // Checked before waiting, and polled every 100 ms: a novel is ready at
+    // once, and the old wait-then-check loop added a full second per chapter.
+    while (isOk != true && startFailure == null) {
       if (DateTime.now().isAfter(startDeadline)) {
         startFailure = "Timed out preparing the download";
-        return false;
+        break;
       }
-      return true;
-    });
+      await Future.delayed(const Duration(milliseconds: 100));
+    }
 
     if (!isOk) {
       botToast(startFailure ?? "Couldn't start the download");

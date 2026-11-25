@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'dart:io';
 
 import 'package:mangayomi/src/rust/api/epub.dart';
@@ -50,7 +51,7 @@ Future<(String, EpubNovel?)> getHtmlContent(
             htmlContent += "\n<hr/>\n${subChapter.content}";
           }
         }
-        result = (_buildHtml(htmlContent), book);
+        result = (buildNovelHtml(htmlContent), book);
       } catch (e, st) {
         // Swallowed, so the reader shows the not-found placeholder below with
         // no clue that parsing was what actually failed.
@@ -60,7 +61,7 @@ Future<(String, EpubNovel?)> getHtmlContent(
         );
       }
 
-      result ??= (_buildHtml("Local epub file not found!"), null);
+      result ??= (buildNovelHtml("Local epub file not found!"), null);
     }
     if (result == null) {
       final storageProvider = StorageProvider();
@@ -95,10 +96,10 @@ Future<(String, EpubNovel?)> getHtmlContent(
         // no extension service or network. The file holds the raw getHtmlContent
         // output (quote-wrapped, like the network path); routing it back through
         // cleanHtmlContent renders a blank page, so strip the outer quotes and
-        // hand it to _buildHtml directly.
+        // hand it to buildNovelHtml directly.
         final raw = await localFile.readAsString();
         final stripped = decodeNovelHtmlResponse(raw);
-        result = (_buildHtml(stripped), null);
+        result = (buildNovelHtml(stripped), null);
       } else {
         // Not downloaded: fetch from the source (needs network).
         final source = getSource(
@@ -119,7 +120,7 @@ Future<(String, EpubNovel?)> getHtmlContent(
           proxyServer: proxyServer,
         );
         final stripped = decodeNovelHtmlResponse(html);
-        result = (_buildHtml(stripped), null);
+        result = (buildNovelHtml(stripped), null);
       }
     }
 
@@ -138,7 +139,8 @@ Future<(String, EpubNovel?)> getHtmlContent(
   }
 }
 
-String _buildHtml(String input) {
+@visibleForTesting
+String buildNovelHtml(String input) {
   // Decode basic escapes
   String cleaned = input
       .replaceAll("\\n", "")
@@ -195,13 +197,12 @@ String _decodeHtmlEntities(String html) {
     return charCode != null ? String.fromCharCode(charCode) : match.group(0)!;
   });
 
-  // Decode common named HTML entities
+  // Decode common named HTML entities. Not &amp;, &lt;, &gt; or &quot;: this
+  // runs on serialized HTML, where those are the escapes that keep text from
+  // being read as markup. Decoding them turned a novel's literal "<技能>" into
+  // a tag the renderer swallowed, and broke quoted attribute values.
   final entities = {
-    '&amp;': '&',
-    '&lt;': '<',
-    '&gt;': '>',
     '&nbsp;': ' ',
-    '&quot;': '"',
     '&apos;': "'",
     '&ldquo;': '"',
     '&rdquo;': '"',

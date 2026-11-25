@@ -314,12 +314,12 @@ class MProviderBridged {
     interpreter.registertopLevelFunction(
       'evalJs',
       (visitor, positionalArgs, namedArgs, _) =>
-          getJavascriptRuntime().evaluateAsync(positionalArgs[0] as String),
+          _evalJsOnce(positionalArgs[0] as String),
     );
     interpreter.registertopLevelFunction(
       'evalJsSync',
       (visitor, positionalArgs, namedArgs, _) =>
-          getJavascriptRuntime().evaluate(positionalArgs[0] as String),
+          _evalJsOnceSync(positionalArgs[0] as String),
     );
     interpreter.registertopLevelFunction(
       'regExp',
@@ -386,3 +386,19 @@ class MProviderBridged {
     });
   }
 }
+
+// evalJs/evalJsSync: a throwaway QuickJS engine per call, freed once the
+// result is in hand (it used to stay allocated for good, one per call).
+JsEvalResult _evalJsOnceSync(String code) {
+  final runtime = getJavascriptRuntime();
+  try {
+    return runtime.evaluate(code);
+  } finally {
+    JavascriptRuntime.channelFunctionsRegistered.remove(
+      runtime.getEngineInstanceId(),
+    );
+    runtime.dispose();
+  }
+}
+
+Future<JsEvalResult> _evalJsOnce(String code) async => _evalJsOnceSync(code);

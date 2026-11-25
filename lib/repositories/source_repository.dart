@@ -190,20 +190,34 @@ class SourceRepository {
 
   // Marks source as the last one tapped into within itemType, so it sorts
   // first next time; every other source of that itemType loses the flag.
+  // Only the sources whose flag changes are read and written: it used to
+  // rewrite every source of the type, code and all, on each tap.
   Future<void> markLastUsed(ItemType itemType, int? sourceId) =>
       dbWriteQueue.run(
         () => isar.writeTxn(() async {
-          final sources = await isar.sources
+          final flagged = await isar.sources
               .filter()
-              .idIsNotNull()
               .itemTypeEqualTo(itemType)
+              .lastUsedEqualTo(true)
               .findAll();
-          final updated = sources.map((src) {
-            return src
-              ..lastUsed = src.id == sourceId
-              ..updatedAt = DateTime.now().millisecondsSinceEpoch;
-          }).toList();
-          await isar.sources.putAll(updated);
+          final target = sourceId == null
+              ? null
+              : await isar.sources.get(sourceId);
+          final now = DateTime.now().millisecondsSinceEpoch;
+          final updated = <Source>[
+            for (final src in flagged)
+              if (src.id != sourceId)
+                src
+                  ..lastUsed = false
+                  ..updatedAt = now,
+            if (target != null &&
+                target.itemType == itemType &&
+                target.lastUsed != true)
+              target
+                ..lastUsed = true
+                ..updatedAt = now,
+          ];
+          if (updated.isNotEmpty) await isar.sources.putAll(updated);
         }),
       );
 

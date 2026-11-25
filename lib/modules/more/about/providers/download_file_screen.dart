@@ -2,8 +2,10 @@ import 'package:mangayomi/modules/more/about/providers/app_release.dart';
 
 import 'dart:async';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:math' as math;
 
+import 'package:crypto/crypto.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:shiori/shiori.dart';
@@ -61,8 +63,6 @@ class _DownloadFileScreenState extends ConsumerState<DownloadFileScreen> {
   String _currentVersion = '';
   UpdateAsset? _apk;
 
-  http.StreamedResponse? _response;
-  final List<int> _bytes = [];
   StreamSubscription<List<int>>? _subscription;
   final ScrollController _changelogScrollController = ScrollController();
 
@@ -510,15 +510,22 @@ class _DownloadFileScreenState extends ConsumerState<DownloadFileScreen> {
       if (apk == null) {
         throw StateError('No APK in ${widget.updateAvailable.pageUrl}');
       }
-      await _downloadApk(apk.url);
+      await _downloadApk(apk);
     } catch (e, stackTrace) {
       recordError(e, stack: stackTrace, source: 'download_file_screen');
       _fail(l10n.update_download_failed('$e'));
     }
   }
 
-  Future<void> _downloadApk(String url) async {
+  /// Downloads [apk] to Downloads and installs it.
+  ///
+  /// Streamed to a `.part` file and renamed once its size and the SHA-256
+  /// GitHub publishes check out. It used to collect the whole package (over
+  /// 100 MB, as a List<int> of 8-byte slots) in memory first, and to trust
+  /// any file of the right length.
+  Future<void> _downloadApk(UpdateAsset apk) async {
     final l10n = context.l10n;
+    final url = apk.url;
     var status = await Permission.storage.status;
     if (!status.isGranted) {
       await Permission.storage.request();
@@ -529,84 +536,136 @@ class _DownloadFileScreenState extends ConsumerState<DownloadFileScreen> {
       '${dir!.path}/${appReleaseApkFileName(widget.updateAvailable.version)}',
     );
 
-    // If a file already exists, verify its integrity by comparing its size
-    // against the server's Content-Length. A corrupt or incomplete download
-    // would have a smaller size — delete it and re-download in that case.
+    // One from an earlier attempt: installed only when it is this release.
     if (await file.exists()) {
-      bool fileIsValid = false;
-      try {
-        final headResponse = await http.head(Uri.parse(url));
-        final contentLength = int.tryParse(
-          headResponse.headers['content-length'] ?? '',
-        );
-        final localSize = await file.length();
-        if (contentLength != null && localSize == contentLength) {
-          fileIsValid = true;
-        }
-      } catch (error, stackTrace) {
-        // Network unavailable: fall back to assuming the file is valid so the
-        // user can at least attempt installation while offline.
-        recordError(error, stack: stackTrace, source: 'download_file_screen');
-        fileIsValid = true;
-      }
-
-      if (fileIsValid) {
+      if (await _isExpectedApk(file, apk)) {
         if (!mounted) return;
         setState(() {
           _isInstalling = true;
         });
         await _install(file);
         return;
-      } else {
-        // File is corrupted or incomplete — delete and re-download.
-        try {
-          await file.delete();
-        } catch (error, stackTrace) {
-          recordError(error, stack: stackTrace, source: 'download_file_screen');
-        }
+      }
+      try {
+        await file.delete();
+      } catch (error, stackTrace) {
+        recordError(error, stack: stackTrace, source: 'download_file_screen');
       }
     }
 
-    _bytes.clear();
     _received = 0;
-
-    _response = await http.Client().send(http.Request('GET', Uri.parse(url)));
+    final part = File('${file.path}.part');
+    final client = http.Client();
+    final response = await client.send(http.Request('GET', Uri.parse(url)));
     // The body of an error page is not an APK.
-    if (_response!.statusCode != HttpStatus.ok) {
-      throw HttpException('HTTP ${_response!.statusCode}', uri: Uri.parse(url));
+    if (response.statusCode != HttpStatus.ok) {
+      client.close();
+      throw HttpException('HTTP ${response.statusCode}', uri: Uri.parse(url));
     }
-    if (!mounted) return;
+    if (!mounted) {
+      client.close();
+      return;
+    }
     setState(() {
-      _total = _response?.contentLength ?? 0;
+      _total = response.contentLength ?? apk.size;
     });
-    _subscription = _response?.stream.listen(
-      (value) {
-        setState(() {
-          _bytes.addAll(value);
-          _received += value.length;
-        });
+    final sink = part.openWrite();
+    final digest = _DigestSink();
+    final hasher = sha256.startChunkedConversion(digest);
+    var failed = false;
+    Future<void> discard() async {
+      failed = true;
+      client.close();
+      try {
+        await sink.close();
+      } catch (_) {}
+      try {
+        if (await part.exists()) await part.delete();
+      } catch (_) {}
+    }
+
+    _subscription = response.stream.listen(
+      (chunk) {
+        sink.add(chunk);
+        hasher.add(chunk);
+        _received += chunk.length;
+        if (mounted) setState(() {});
       },
-      onError: (Object e, StackTrace stackTrace) {
+      onError: (Object e, StackTrace stackTrace) async {
         recordError(e, stack: stackTrace, source: 'download_file_screen');
+        await discard();
         _fail(l10n.update_network_error);
       },
       cancelOnError: true,
     );
-    _subscription?.onDone(() async {
+    _subscription!.onDone(() async {
+      if (failed) return;
+      client.close();
+      hasher.close();
+      try {
+        await sink.close();
+      } catch (e, stackTrace) {
+        recordError(e, stack: stackTrace, source: 'download_file_screen');
+        await discard();
+        _fail(l10n.update_write_failed);
+        return;
+      }
+      final expectedSize = response.contentLength ?? apk.size;
+      final wrongSize = expectedSize > 0 && _received != expectedSize;
+      final wrongDigest =
+          apk.sha256 != null && digest.value.toString() != apk.sha256;
+      if (wrongSize || wrongDigest) {
+        await discard();
+        _fail(
+          l10n.update_download_failed(
+            wrongSize
+                ? 'incomplete download ($_received / $expectedSize bytes)'
+                : 'checksum mismatch',
+          ),
+        );
+        return;
+      }
       if (mounted) {
         setState(() {
           _isInstalling = true;
         });
       }
       try {
-        await file.writeAsBytes(_bytes);
+        await part.rename(file.path);
       } catch (e, stackTrace) {
         recordError(e, stack: stackTrace, source: 'download_file_screen');
+        await discard();
         _fail(l10n.update_write_failed);
         return;
       }
       await _install(file);
     });
+  }
+
+  /// Whether [file] is [apk]: its size, and its SHA-256 when GitHub gave one.
+  /// Without either (no size published), the server's length is asked for;
+  /// offline, it is trusted so the update can still be installed.
+  Future<bool> _isExpectedApk(File file, UpdateAsset apk) async {
+    try {
+      final localSize = await file.length();
+      if (apk.size > 0) {
+        if (localSize != apk.size) return false;
+        final expected = apk.sha256;
+        if (expected == null) return true;
+        final path = file.path;
+        final actual = await Isolate.run(
+          () async => (await sha256.bind(File(path).openRead()).first)
+              .toString(),
+        );
+        return actual == expected;
+      }
+      final head = await http.head(Uri.parse(apk.url));
+      final contentLength = int.tryParse(head.headers['content-length'] ?? '');
+      return contentLength != null && localSize == contentLength;
+    } catch (error, stackTrace) {
+      recordError(error, stack: stackTrace, source: 'download_file_screen');
+      return apk.size <= 0;
+    }
   }
 
   /// Hands [file] to the installer and closes the dialog, or says why not.
@@ -639,4 +698,15 @@ class ApkInstaller {
   static Future<void> installApk(String filePath) async {
     await _platform.invokeMethod('installApk', {'filePath': filePath});
   }
+}
+
+/// Receives the one digest a chunked SHA-256 conversion produces.
+class _DigestSink implements Sink<Digest> {
+  late Digest value;
+
+  @override
+  void add(Digest data) => value = data;
+
+  @override
+  void close() {}
 }

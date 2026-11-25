@@ -244,9 +244,9 @@ class SyncServer extends _$SyncServer {
         }
         return false;
       }
-      if (ref.mounted) {
-        ref.invalidate(synchingProvider(syncId: syncId));
-      }
+      // No invalidate here: the notifier's setters already hold the new
+      // since/lastSync in memory, and the saves are still queued, so
+      // re-reading the row got the old checkpoint back.
       if (!silent && l10n != null) {
         botToast(l10n.sync_finished, second: 2);
       }
