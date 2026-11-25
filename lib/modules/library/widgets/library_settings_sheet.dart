@@ -20,6 +20,7 @@ void showLibrarySettingsSheet({
   required Settings settings,
   required ItemType itemType,
   required List<Manga> entries,
+  int? categoryId,
 }) {
   final l10n = l10nLocalizations(context)!;
   customDraggableTabBar(
@@ -30,7 +31,7 @@ void showLibrarySettingsSheet({
     ],
     children: [
       _FilterTab(itemType: itemType, settings: settings, entries: entries),
-      _SortTab(itemType: itemType, settings: settings),
+      _SortTab(itemType: itemType, settings: settings, categoryId: categoryId),
       _DisplayTab(itemType: itemType, settings: settings),
     ],
     context: context,
@@ -233,7 +234,13 @@ class _SortTab extends ConsumerWidget {
   final ItemType itemType;
   final Settings settings;
 
-  const _SortTab({required this.itemType, required this.settings});
+  /// The category tab the sheet was opened on: its sort is the one changed.
+  final int? categoryId;
+  const _SortTab({
+    required this.itemType,
+    required this.settings,
+    this.categoryId,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -242,11 +249,16 @@ class _SortTab extends ConsumerWidget {
           sortLibraryMangaStateProvider(
             itemType: itemType,
             settings: settings,
+            categoryId: categoryId,
           ).notifier,
         )
         .isReverse();
     final reverseChapter = ref.watch(
-      sortLibraryMangaStateProvider(itemType: itemType, settings: settings),
+      sortLibraryMangaStateProvider(
+        itemType: itemType,
+        settings: settings,
+        categoryId: categoryId,
+      ),
     );
     return Column(
       children: [
@@ -260,6 +272,7 @@ class _SortTab extends ConsumerWidget {
                     sortLibraryMangaStateProvider(
                       itemType: itemType,
                       settings: settings,
+                      categoryId: categoryId,
                     ).notifier,
                   )
                   .set(i);

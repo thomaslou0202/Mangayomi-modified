@@ -176,8 +176,6 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
     final showCategoryTabs = watchWithSettings(
       libraryShowCategoryTabsStateProvider.call,
     );
-    final reverse =
-        watchWithSettings(sortLibraryMangaStateProvider.call).reverse ?? false;
     final continueReaderBtn = watchWithSettings(
       libraryShowContinueReadingButtonStateProvider.call,
     );
@@ -250,7 +248,18 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
                   bookmarkedFilterType: bookmarkedFilterType,
                   completedFilterType: completedFilterType,
                   trackingFilterType: trackingFilterType,
-                  reverse: reverse,
+                  // The category's own sort, when it has one.
+                  reverse:
+                      ref
+                          .watch(
+                            sortLibraryMangaStateProvider(
+                              itemType: widget.itemType,
+                              settings: settings,
+                              categoryId: categoryId,
+                            ),
+                          )
+                          .reverse ??
+                      false,
                   downloadedChapter: downloadedChapter,
                   continueReaderBtn: continueReaderBtn,
                   localSource: localSource,

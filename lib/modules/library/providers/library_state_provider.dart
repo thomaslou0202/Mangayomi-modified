@@ -595,7 +595,16 @@ class SortLibraryMangaState extends _$SortLibraryMangaState {
   SortLibraryManga build({
     required ItemType itemType,
     required Settings settings,
+    int? categoryId,
   }) {
+    if (categoryId != null) {
+      final own = settings.sortLibraryCategoryList
+          ?.where((s) => s.categoryId == categoryId)
+          .firstOrNull;
+      if (own != null) {
+        return SortLibraryManga(index: own.index, reverse: own.reverse);
+      }
+    }
     switch (itemType) {
       case ItemType.manga:
         return settings.sortLibraryManga ?? SortLibraryManga();
@@ -612,6 +621,24 @@ class SortLibraryMangaState extends _$SortLibraryMangaState {
       ..index = index
       ..reverse = state.index == index ? !reverse : reverse;
 
+    if (categoryId != null) {
+      settingsRepository.save(
+        settings
+          ..sortLibraryCategoryList = [
+            for (final s
+                in settings.sortLibraryCategoryList ??
+                    const <SortLibraryCategory>[])
+              if (s.categoryId != categoryId) s,
+            SortLibraryCategory(
+              categoryId: categoryId,
+              index: value.index,
+              reverse: value.reverse,
+            ),
+          ],
+      );
+      state = value;
+      return;
+    }
     switch (itemType) {
       case ItemType.manga:
         appSettings = settings..sortLibraryManga = value;

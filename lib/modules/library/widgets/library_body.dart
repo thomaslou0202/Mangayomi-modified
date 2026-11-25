@@ -96,7 +96,11 @@ class LibraryBody extends ConsumerWidget {
     }
     final sortType = ref
         .watch(
-          sortLibraryMangaStateProvider(itemType: itemType, settings: settings),
+          sortLibraryMangaStateProvider(
+            itemType: itemType,
+            settings: settings,
+            categoryId: categoryId,
+          ),
         )
         .index;
     final mangaIdsList = ref.watch(mangasListStateProvider);

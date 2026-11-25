@@ -1851,7 +1851,8 @@ final class SortLibraryMangaStateProvider
     extends $NotifierProvider<SortLibraryMangaState, SortLibraryManga> {
   SortLibraryMangaStateProvider._({
     required SortLibraryMangaStateFamily super.from,
-    required ({ItemType itemType, Settings settings}) super.argument,
+    required ({ItemType itemType, Settings settings, int? categoryId})
+    super.argument,
   }) : super(
          retry: null,
          name: r'sortLibraryMangaStateProvider',
@@ -1894,7 +1895,7 @@ final class SortLibraryMangaStateProvider
 }
 
 String _$sortLibraryMangaStateHash() =>
-    r'abf901ae0407fc8fd5ef02ae05587a443e46be8a';
+    r'fb802ce1d608a4d072dbf34532900f87fb8ef191';
 
 final class SortLibraryMangaStateFamily extends $Family
     with
@@ -1903,7 +1904,7 @@ final class SortLibraryMangaStateFamily extends $Family
           SortLibraryManga,
           SortLibraryManga,
           SortLibraryManga,
-          ({ItemType itemType, Settings settings})
+          ({ItemType itemType, Settings settings, int? categoryId})
         > {
   SortLibraryMangaStateFamily._()
     : super(
@@ -1917,8 +1918,9 @@ final class SortLibraryMangaStateFamily extends $Family
   SortLibraryMangaStateProvider call({
     required ItemType itemType,
     required Settings settings,
+    int? categoryId,
   }) => SortLibraryMangaStateProvider._(
-    argument: (itemType: itemType, settings: settings),
+    argument: (itemType: itemType, settings: settings, categoryId: categoryId),
     from: this,
   );
 
@@ -1927,13 +1929,16 @@ final class SortLibraryMangaStateFamily extends $Family
 }
 
 abstract class _$SortLibraryMangaState extends $Notifier<SortLibraryManga> {
-  late final _$args = ref.$arg as ({ItemType itemType, Settings settings});
+  late final _$args =
+      ref.$arg as ({ItemType itemType, Settings settings, int? categoryId});
   ItemType get itemType => _$args.itemType;
   Settings get settings => _$args.settings;
+  int? get categoryId => _$args.categoryId;
 
   SortLibraryManga build({
     required ItemType itemType,
     required Settings settings,
+    int? categoryId,
   });
   @$mustCallSuper
   @override
@@ -1949,7 +1954,11 @@ abstract class _$SortLibraryMangaState extends $Notifier<SortLibraryManga> {
             >;
     return element.handleCreate(
       ref,
-      () => build(itemType: _$args.itemType, settings: _$args.settings),
+      () => build(
+        itemType: _$args.itemType,
+        settings: _$args.settings,
+        categoryId: _$args.categoryId,
+      ),
     );
   }
 }

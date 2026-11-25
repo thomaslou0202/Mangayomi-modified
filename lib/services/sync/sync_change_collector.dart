@@ -50,6 +50,7 @@ const _deviceLocalSettingsKeys = {
   'chapterNumberDisplayMangaIds',
   'downloadQueueOrder',
   'updateErrorsList',
+  'sortLibraryCategoryList',
 };
 
 // Per-snapshot memoization avoids a manga lookup for every chapter/history row.

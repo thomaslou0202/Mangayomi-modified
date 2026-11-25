@@ -473,6 +473,8 @@ Settings _preserveDeviceLocalSettings(Settings incoming, Settings current) {
         current.novelLibraryShowContinueReadingButton
     ..novelLibraryLocalSource = current.novelLibraryLocalSource
     ..sortLibraryNovel = current.sortLibraryNovel
+    // Keyed by this device's local category ids.
+    ..sortLibraryCategoryList = current.sortLibraryCategoryList
     // Per-title chapter sorting and filters are keyed by this device's local
     // manga ids, which mean other titles on another device.
     ..sortChapterList = current.sortChapterList

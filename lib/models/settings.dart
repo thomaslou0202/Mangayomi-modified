@@ -298,6 +298,10 @@ class Settings {
 
   late SortLibraryManga? sortLibraryNovel;
 
+  /// A library category's own sort, by this device's local category id. A
+  /// category without one, and the uncategorized tab, use their media's sort.
+  List<SortLibraryCategory>? sortLibraryCategoryList;
+
   @enumerated
   late DisplayType novelDisplayType;
 
@@ -677,6 +681,7 @@ class Settings {
     this.novelLibraryShowContinueReadingButton = false,
     this.novelLibraryLocalSource,
     this.sortLibraryNovel,
+    this.sortLibraryCategoryList,
     this.novelDisplayType = DisplayType.comfortableGrid,
     this.novelFontSize = 14,
     this.novelTextAlign = NovelTextAlign.left,
@@ -1017,6 +1022,11 @@ class Settings {
     sortLibraryNovel = json['sortLibraryNovel'] != null
         ? SortLibraryManga.fromJson(json['sortLibraryNovel'])
         : null;
+    if (json['sortLibraryCategoryList'] != null) {
+      sortLibraryCategoryList = (json['sortLibraryCategoryList'] as List)
+          .map((e) => SortLibraryCategory.fromJson(e))
+          .toList();
+    }
     novelDisplayType = DisplayType
         .values[json['novelDisplayType'] ?? DisplayType.comfortableGrid.index];
     if (json['novelFontSize'] != null) {
@@ -1344,6 +1354,9 @@ class Settings {
         novelLibraryShowContinueReadingButton,
     'novelLibraryLocalSource': novelLibraryLocalSource,
     'sortLibraryNovel': sortLibraryNovel?.toJson(),
+    'sortLibraryCategoryList': sortLibraryCategoryList
+        ?.map((e) => e.toJson())
+        .toList(),
     'novelDisplayType': novelDisplayType.index,
     'novelFontSize': novelFontSize,
     'novelTextAlign': novelTextAlign.index,
@@ -1566,6 +1579,25 @@ class SortLibraryManga {
   }
 
   Map<String, dynamic> toJson() => {'index': index, 'reverse': reverse};
+}
+
+@embedded
+class SortLibraryCategory {
+  int? categoryId;
+  bool? reverse;
+  int? index;
+  SortLibraryCategory({this.categoryId, this.reverse = false, this.index = 0});
+  SortLibraryCategory.fromJson(Map<String, dynamic> json) {
+    categoryId = json['categoryId'];
+    index = json['index'];
+    reverse = json['reverse'];
+  }
+
+  Map<String, dynamic> toJson() => {
+    'categoryId': categoryId,
+    'index': index,
+    'reverse': reverse,
+  };
 }
 
 @embedded
