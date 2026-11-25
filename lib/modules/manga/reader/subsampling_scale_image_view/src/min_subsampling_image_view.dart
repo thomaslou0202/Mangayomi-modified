@@ -202,7 +202,7 @@ class _MinSubsamplingImageState extends ConsumerState<MinSubsamplingImage> {
           }
         },
         onChunk: (ImageChunkEvent event) {
-          if (mounted) {
+          if (mounted && loadingProgressStepped(_loadingProgress, event)) {
             setState(() {
               _loadingProgress = event;
             });

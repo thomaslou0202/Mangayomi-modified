@@ -523,7 +523,7 @@ class _SubsamplingScaleImageViewState extends State<SubsamplingScaleImageView>
         }
       },
       onChunk: (ImageChunkEvent chunk) {
-        if (mounted) {
+        if (mounted && loadingProgressStepped(_loadingProgress, chunk)) {
           setState(() => _loadingProgress = chunk);
         }
       },

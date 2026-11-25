@@ -190,6 +190,11 @@ class ReaderPageContent extends ConsumerWidget {
               controller: extendedController,
               scrollDirection: scrollDirection,
               reverse: isReverseHorizontal,
+              // Keeps the page on each side built: otherwise the next page
+              // is created, its file looked up and its image decoded on the
+              // first frames of the swipe, which stalled the page under the
+              // finger before it moved on.
+              allowImplicitScrolling: true,
               physics: isCurrentPageZoomed
                   ? const NeverScrollableScrollPhysics()
                   : const ClampingScrollPhysics(),
@@ -248,6 +253,11 @@ class ReaderPageContent extends ConsumerWidget {
               controller: extendedController,
               scrollDirection: scrollDirection,
               reverse: isReverseHorizontal,
+              // Keeps the page on each side built: otherwise the next page
+              // is created, its file looked up and its image decoded on the
+              // first frames of the swipe, which stalled the page under the
+              // finger before it moved on.
+              allowImplicitScrolling: true,
               physics: isCurrentPageZoomed
                   ? const NeverScrollableScrollPhysics()
                   : const ClampingScrollPhysics(),

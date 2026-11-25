@@ -107,7 +107,7 @@ extension UChapDataPreloadExtensions on UChapDataPreload {
       return tempFile.path;
     }
     if (isLocale == true && directory != null && index != null) {
-      return findDownloadedPageFile(directory!, index!)?.path;
+      return (await findDownloadedPageFileAsync(directory!, index!))?.path;
     }
     if (pageUrl != null) {
       final cachedImage = await _getCachedImageFile(pageUrl!.url);
@@ -158,6 +158,10 @@ extension UChapDataPreloadExtensions on UChapDataPreload {
               ? MemoryImage(archiveImage)
               : data.localImagePath != null
               ? FileImage(File(data.localImagePath!))
+              // Found already (getLocalFilePath): the lookup below checks
+              // the disk once per extension, on the UI thread.
+              : data.resolvedFilePath != null
+              ? FileImage(File(data.resolvedFilePath!))
               : FileImage(
                   findDownloadedPageFile(data.directory!, data.index!) ??
                       // Nothing found under any known extension - fall back

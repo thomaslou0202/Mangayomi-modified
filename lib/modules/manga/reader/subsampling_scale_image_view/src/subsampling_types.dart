@@ -179,3 +179,14 @@ ui.Offset clampPanTranslation({
 
   return ui.Offset(tx, ty);
 }
+
+/// Whether [next] moves the shown download progress on from [previous]: a
+/// whole percent, or the first chunk when the size is unknown. A page used
+/// to rebuild for every network chunk, many times a second while loading.
+bool loadingProgressStepped(ImageChunkEvent? previous, ImageChunkEvent next) {
+  final total = next.expectedTotalBytes;
+  if (previous == null) return true;
+  if (total == null || total <= 0) return false;
+  int percent(ImageChunkEvent e) => e.cumulativeBytesLoaded * 100 ~/ total;
+  return percent(next) != percent(previous);
+}

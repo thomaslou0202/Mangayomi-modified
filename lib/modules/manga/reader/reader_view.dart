@@ -1244,7 +1244,9 @@ class _MangaChapterPageGalleryState
       triggerNextChapterPreload();
     }
 
-    await handleEvictionsAndPrefetch();
+    // Debounced: onPageChanged fires halfway through the swipe, and this
+    // work ran while the page was still moving.
+    scheduleEvictionsAndPrefetch();
   }
 
   /// Updates the active chapter when the user scrolls or swipes into a page
