@@ -3394,6 +3394,13 @@ class AppLocalizationsId extends AppLocalizations {
       'Tampilan langsung memori yang digunakan aplikasi. Untuk mengukur langsung pada perangkat: pantau saat menggulir perpustakaan atau membaca bab.';
 
   @override
+  String get performance_overlay => 'Show frame times';
+
+  @override
+  String get performance_overlay_subtitle =>
+      'Two graphs of how long each frame takes: the app\'s work above, drawing below. A spike shows which one stutters.';
+
+  @override
   String get beta => 'Beta';
 
   @override

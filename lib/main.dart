@@ -414,6 +414,7 @@ class _MyAppState extends ConsumerState<MyApp>
     final router = ref.watch(routerProvider);
 
     return MaterialApp.router(
+      showPerformanceOverlay: ref.watch(performanceOverlayVisibleProvider),
       theme: ref.watch(lightThemeProvider),
       darkTheme: ref.watch(darkThemeProvider),
       themeMode: themeMode,

@@ -264,6 +264,10 @@ mixin NovelPaginationAndTtsMixin<T extends ConsumerStatefulWidget>
           color: parsedBackgroundColor,
           child: PageView.builder(
             controller: spreadController,
+            // Keeps the page on each side built: a page is laid out from its
+            // HTML when it is created, and creating the next one on the
+            // first frames of a swipe made the page stall before it moved.
+            allowImplicitScrolling: true,
             itemCount: totalCount,
             onPageChanged: (pageIndex) {
               currentSpreadIndex = pageIndex;

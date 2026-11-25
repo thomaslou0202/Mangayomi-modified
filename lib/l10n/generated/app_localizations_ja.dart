@@ -3315,6 +3315,13 @@ class AppLocalizationsJa extends AppLocalizations {
       'アプリが保持しているメモリのリアルタイム表示。推測ではなく端末上で測定するために、ライブラリのスクロールや閲覧中に確認できます。';
 
   @override
+  String get performance_overlay => 'Show frame times';
+
+  @override
+  String get performance_overlay_subtitle =>
+      'Two graphs of how long each frame takes: the app\'s work above, drawing below. A spike shows which one stutters.';
+
+  @override
   String get beta => 'ベータ';
 
   @override

@@ -3400,6 +3400,13 @@ class AppLocalizationsFa extends AppLocalizations {
       'نمایش زنده‌ای از میزان حافظه اشغال‌شده توسط برنامه. برای اندازه‌گیری واقعی روی دستگاه به جای حدس زدن: هنگام پیمایش در کتابخانه یا خواندن فصل آن را مشاهده کنید.';
 
   @override
+  String get performance_overlay => 'Show frame times';
+
+  @override
+  String get performance_overlay_subtitle =>
+      'Two graphs of how long each frame takes: the app\'s work above, drawing below. A spike shows which one stutters.';
+
+  @override
   String get beta => 'بتا';
 
   @override

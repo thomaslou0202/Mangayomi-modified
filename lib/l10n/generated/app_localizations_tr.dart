@@ -3397,6 +3397,13 @@ class AppLocalizationsTr extends AppLocalizations {
       'Uygulamanın kullandığı belleğin canlı gösterimi. Tahmin etmek yerine cihaz üzerinde ölçüm yapın: kitaplıkta gezinirken veya bir bölüm okurken izleyin.';
 
   @override
+  String get performance_overlay => 'Show frame times';
+
+  @override
+  String get performance_overlay_subtitle =>
+      'Two graphs of how long each frame takes: the app\'s work above, drawing below. A spike shows which one stutters.';
+
+  @override
   String get beta => 'Beta';
 
   @override

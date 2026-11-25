@@ -3385,6 +3385,13 @@ class AppLocalizationsEn extends AppLocalizations {
       'A live readout of what the app is holding. For measuring on the device rather than guessing: watch it while scrolling the library or reading a chapter.';
 
   @override
+  String get performance_overlay => 'Show frame times';
+
+  @override
+  String get performance_overlay_subtitle =>
+      'Two graphs of how long each frame takes: the app\'s work above, drawing below. A spike shows which one stutters.';
+
+  @override
   String get beta => 'Beta';
 
   @override

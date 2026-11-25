@@ -3316,6 +3316,13 @@ class AppLocalizationsKo extends AppLocalizations {
       '앱이 점유 중인 메모리를 실시간으로 표시합니다. 추측이 아닌 기기에서 직접 측정하려면 보관함을 스크롤하거나 화를 읽을 때 확인하세요.';
 
   @override
+  String get performance_overlay => 'Show frame times';
+
+  @override
+  String get performance_overlay_subtitle =>
+      'Two graphs of how long each frame takes: the app\'s work above, drawing below. A spike shows which one stutters.';
+
+  @override
   String get beta => '베타';
 
   @override

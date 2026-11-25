@@ -3419,6 +3419,13 @@ class AppLocalizationsPt extends AppLocalizations {
       'Leitura em direto da memória ocupada pela aplicação. Para medir no dispositivo em vez de adivinhar: observe enquanto percorre a biblioteca ou lê um capítulo.';
 
   @override
+  String get performance_overlay => 'Show frame times';
+
+  @override
+  String get performance_overlay_subtitle =>
+      'Two graphs of how long each frame takes: the app\'s work above, drawing below. A spike shows which one stutters.';
+
+  @override
   String get beta => 'Beta';
 
   @override

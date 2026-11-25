@@ -3434,6 +3434,13 @@ class AppLocalizationsFr extends AppLocalizations {
       'Affichage en direct de ce que l\'application conserve en mémoire. Pour mesurer sur l\'appareil au lieu de deviner : observez pendant le défilement de la bibliothèque ou la lecture d\'un chapitre.';
 
   @override
+  String get performance_overlay => 'Show frame times';
+
+  @override
+  String get performance_overlay_subtitle =>
+      'Two graphs of how long each frame takes: the app\'s work above, drawing below. A spike shows which one stutters.';
+
+  @override
   String get beta => 'Bêta';
 
   @override

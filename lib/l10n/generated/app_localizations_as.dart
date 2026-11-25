@@ -3386,6 +3386,13 @@ class AppLocalizationsAs extends AppLocalizations {
       'এপে ব্যৱহাৰ কৰা মেমৰিৰ লাইভ তথ্য। ডিভাইচত সঠিকভাৱে নিৰীক্ষণ কৰিবলৈ: পুথিভঁৰাল স্ক্ৰল কৰোঁতে বা অধ্যায় পঢ়োঁতে লক্ষ্য কৰক।';
 
   @override
+  String get performance_overlay => 'Show frame times';
+
+  @override
+  String get performance_overlay_subtitle =>
+      'Two graphs of how long each frame takes: the app\'s work above, drawing below. A spike shows which one stutters.';
+
+  @override
   String get beta => 'বিটা';
 
   @override

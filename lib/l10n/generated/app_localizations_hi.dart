@@ -3389,6 +3389,13 @@ class AppLocalizationsHi extends AppLocalizations {
       'ऐप द्वारा उपयोग की जा रही मेमोरी का लाइव विवरण। उपकरण पर सटीक माप के लिए: लाइब्रेरी स्क्रॉल करते समय या अध्याय पढ़ते समय देखें।';
 
   @override
+  String get performance_overlay => 'Show frame times';
+
+  @override
+  String get performance_overlay_subtitle =>
+      'Two graphs of how long each frame takes: the app\'s work above, drawing below. A spike shows which one stutters.';
+
+  @override
   String get beta => 'बीटा';
 
   @override

@@ -32,3 +32,18 @@ class MemoryOverlayVisible extends Notifier<bool> {
 
 final memoryOverlayVisibleProvider =
     NotifierProvider<MemoryOverlayVisible, bool>(MemoryOverlayVisible.new);
+
+/// Flutter's frame-time graphs (UI thread above, raster below). Not
+/// persisted, like the memory overlay: it is for measuring a stutter on the
+/// device, then turning off.
+class PerformanceOverlayVisible extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  void set(bool value) => state = value;
+}
+
+final performanceOverlayVisibleProvider =
+    NotifierProvider<PerformanceOverlayVisible, bool>(
+      PerformanceOverlayVisible.new,
+    );

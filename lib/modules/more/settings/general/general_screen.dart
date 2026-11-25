@@ -293,6 +293,13 @@ class _GeneralStateScreen extends ConsumerState<GeneralScreen> {
                 onChanged: (v) =>
                     ref.read(memoryOverlayVisibleProvider.notifier).set(v),
               ),
+              ShioriSwitchRow(
+                title: l10n.performance_overlay,
+                subtitle: l10n.performance_overlay_subtitle,
+                value: ref.watch(performanceOverlayVisibleProvider),
+                onChanged: (v) =>
+                    ref.read(performanceOverlayVisibleProvider.notifier).set(v),
+              ),
               // A way back to the first-run screen. It is the only way to see
               // it once it has been dismissed, and on a debug build, where a
               // fresh install skips it, the only way to see it at all.

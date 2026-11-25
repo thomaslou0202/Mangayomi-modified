@@ -3261,6 +3261,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get memory_overlay_subtitle => '实时显示应用占用的内存。可在滚动书架或阅读章节时实时观察设备上的内存变化。';
 
   @override
+  String get performance_overlay => 'Show frame times';
+
+  @override
+  String get performance_overlay_subtitle =>
+      'Two graphs of how long each frame takes: the app\'s work above, drawing below. A spike shows which one stutters.';
+
+  @override
   String get beta => 'Beta';
 
   @override
@@ -7940,6 +7947,13 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   @override
   String get memory_overlay_subtitle =>
       '即時顯示應用佔用的記憶體。可在捲動書庫或閱讀章節時即時觀察裝置上的記憶體變化。';
+
+  @override
+  String get performance_overlay => '顯示畫格時間';
+
+  @override
+  String get performance_overlay_subtitle =>
+      '以兩條圖表顯示每一格畫面花費的時間：上方是程式運算，下方是繪圖。出現尖峰時就能看出是哪一邊卡住。';
 
   @override
   String get beta => '測試版';

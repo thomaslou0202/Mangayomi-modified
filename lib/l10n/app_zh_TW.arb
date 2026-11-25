@@ -1340,6 +1340,8 @@
   },
   "memory_overlay": "顯示記憶體佔用",
   "memory_overlay_subtitle": "即時顯示應用佔用的記憶體。可在捲動書庫或閱讀章節時即時觀察裝置上的記憶體變化。",
+  "performance_overlay": "顯示畫格時間",
+  "performance_overlay_subtitle": "以兩條圖表顯示每一格畫面花費的時間：上方是程式運算，下方是繪圖。出現尖峰時就能看出是哪一邊卡住。",
   "beta": "測試版",
   "error_reports": "錯誤報告",
   "error_reports_subtitle": "應用捕獲的錯誤及回報入口",

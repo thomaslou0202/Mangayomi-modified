@@ -6082,6 +6082,18 @@ abstract class AppLocalizations {
   /// **'A live readout of what the app is holding. For measuring on the device rather than guessing: watch it while scrolling the library or reading a chapter.'**
   String get memory_overlay_subtitle;
 
+  /// No description provided for @performance_overlay.
+  ///
+  /// In en, this message translates to:
+  /// **'Show frame times'**
+  String get performance_overlay;
+
+  /// No description provided for @performance_overlay_subtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Two graphs of how long each frame takes: the app\'s work above, drawing below. A spike shows which one stutters.'**
+  String get performance_overlay_subtitle;
+
   /// No description provided for @beta.
   ///
   /// In en, this message translates to:

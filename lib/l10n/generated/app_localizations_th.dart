@@ -3378,6 +3378,13 @@ class AppLocalizationsTh extends AppLocalizations {
       'แสดงข้อมูลการใช้หน่วยความจำของแอปแบบเรียลไทม์ สำหรับการวัดบนอุปกรณ์: สังเกตขณะเลื่อนดูชั้นหนังสือหรืออ่านตอน';
 
   @override
+  String get performance_overlay => 'Show frame times';
+
+  @override
+  String get performance_overlay_subtitle =>
+      'Two graphs of how long each frame takes: the app\'s work above, drawing below. A spike shows which one stutters.';
+
+  @override
   String get beta => 'เบต้า';
 
   @override

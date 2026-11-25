@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart' show visibleForTesting;
+import 'package:flutter/foundation.dart' show compute, visibleForTesting;
 import 'dart:io';
 
 import 'package:mangayomi/src/rust/api/epub.dart';
@@ -51,7 +51,7 @@ Future<(String, EpubNovel?)> getHtmlContent(
             htmlContent += "\n<hr/>\n${subChapter.content}";
           }
         }
-        result = (buildNovelHtml(htmlContent), book);
+        result = (htmlContent, book);
       } catch (e, st) {
         // Swallowed, so the reader shows the not-found placeholder below with
         // no clue that parsing was what actually failed.
@@ -61,7 +61,7 @@ Future<(String, EpubNovel?)> getHtmlContent(
         );
       }
 
-      result ??= (buildNovelHtml("Local epub file not found!"), null);
+      result ??= ("Local epub file not found!", null);
     }
     if (result == null) {
       final storageProvider = StorageProvider();
@@ -99,7 +99,7 @@ Future<(String, EpubNovel?)> getHtmlContent(
         // hand it to buildNovelHtml directly.
         final raw = await localFile.readAsString();
         final stripped = decodeNovelHtmlResponse(raw);
-        result = (buildNovelHtml(stripped), null);
+        result = (stripped, null);
       } else {
         // Not downloaded: fetch from the source (needs network).
         final source = getSource(
@@ -120,24 +120,33 @@ Future<(String, EpubNovel?)> getHtmlContent(
           proxyServer: proxyServer,
         );
         final stripped = decodeNovelHtmlResponse(html);
-        result = (buildNovelHtml(stripped), null);
+        result = (stripped, null);
       }
     }
 
+    // Both passes parse the whole chapter. In the continuous reader the next
+    // chapter loads while the reader scrolls, and parsing it on the UI thread
+    // stalled the scroll.
+    final html = await compute(_processNovelHtml, (
+      result.$1,
+      chapter.manga.value?.name ?? '',
+      chapter.name ?? '',
+    ));
     keepAlive.close();
-    return (
-      removeNovelBookTitle(
-        result.$1,
-        bookTitle: chapter.manga.value?.name ?? '',
-        chapterTitle: chapter.name ?? '',
-      ),
-      result.$2,
-    );
+    return (html, result.$2);
   } catch (e) {
     keepAlive.close();
     rethrow;
   }
 }
+
+/// The reader's HTML for a chapter's raw [args].$1, without the book title
+/// ([args].$2) the source put before the chapter's ([args].$3).
+String _processNovelHtml((String, String, String) args) => removeNovelBookTitle(
+  buildNovelHtml(args.$1),
+  bookTitle: args.$2,
+  chapterTitle: args.$3,
+);
 
 @visibleForTesting
 String buildNovelHtml(String input) {
