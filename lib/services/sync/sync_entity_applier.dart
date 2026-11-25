@@ -329,9 +329,12 @@ class SyncEntityApplier {
       ..chapterName = wire['chapterName'] as String?
       ..date = (wire['date'] as int?)?.toString() ?? ''
       ..updatedAt = incoming;
-    final chapterLocal = chapterRepository.findByUrlAndMangaId(
-      '',
-      mangaLocal.id!,
+    // The wire carries the chapter's name, not its URL. Looking it up by an
+    // empty URL never found it, so a synced update had no chapter and every
+    // query that joins on it left it off the Updates page.
+    final chapterLocal = chapterRepository.findByMangaIdAndName(
+      mangaLocal.id,
+      wire['chapterName'] as String?,
     );
     if (chapterLocal == null) {
       updateRepository.putSync(update);
@@ -399,6 +402,21 @@ Settings _preserveDeviceLocalSettings(Settings incoming, Settings current) {
     ..jrePath = current.jrePath
     ..extensionServerPath = current.extensionServerPath
     ..updatesLastSeenAt = current.updatesLastSeenAt
+    // Paths and per-device state: a Windows download folder written into a
+    // phone's settings broke its downloads, and these lists are keyed by
+    // this device's local manga and chapter ids.
+    ..downloadLocation = current.downloadLocation
+    ..autoBackupLocation = current.autoBackupLocation
+    ..externalBrowser = current.externalBrowser
+    ..lastAutoLibraryUpdate = current.lastAutoLibraryUpdate
+    ..chapterPageIndexList = current.chapterPageIndexList
+    ..personalReaderModeList = current.personalReaderModeList
+    ..personalPageModeList = current.personalPageModeList
+    ..autoScrollPages = current.autoScrollPages
+    ..filterScanlatorList = current.filterScanlatorList
+    ..chapterNumberDisplayMangaIds = current.chapterNumberDisplayMangaIds
+    ..downloadQueueOrder = current.downloadQueueOrder
+    ..updateErrorsList = current.updateErrorsList
     // Library filters, sorting and layout belong to the device. Settings sync
     // as one row and the newest row wins - and reading on another device
     // bumps it - so a phone's filters used to replace this device's on the

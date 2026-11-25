@@ -5,6 +5,9 @@ import 'package:mangayomi/repositories/sync_preference_repository.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 part 'sync_providers.g.dart';
 
+// The setters change [state] in place, save it, and notify. Saving is an
+// asynchronous transaction, so re-reading the row (invalidateSelf) got the old
+// values back, and the next save wrote the sync checkpoint back to them.
 @riverpod
 class Synching extends _$Synching {
   @override
@@ -21,37 +24,37 @@ class Synching extends _$Synching {
         ..email = email
         ..authToken = authToken,
     );
-    ref.invalidateSelf();
+    ref.notifyListeners();
   }
 
   void logout() {
     syncPreferenceRepository.save(state..authToken = null);
-    ref.invalidateSelf();
+    ref.notifyListeners();
   }
 
   void setSince(int timestamp) {
     syncPreferenceRepository.save(state..since = timestamp);
-    ref.invalidateSelf();
+    ref.notifyListeners();
   }
 
   void setLastSync(int timestamp) {
     syncPreferenceRepository.save(state..lastSync = timestamp);
-    ref.invalidateSelf();
+    ref.notifyListeners();
   }
 
   void setServer(String? server) {
     syncPreferenceRepository.save(state..server = server);
-    ref.invalidateSelf();
+    ref.notifyListeners();
   }
 
   void setSyncOn(bool value) {
     syncPreferenceRepository.save(state..syncOn = value);
-    ref.invalidateSelf();
+    ref.notifyListeners();
   }
 
   void setAutoSyncFrequency(int value) {
     syncPreferenceRepository.save(state..autoSyncFrequency = value);
-    ref.invalidateSelf();
+    ref.notifyListeners();
   }
 
   List<ChangedPart> getAllChangedParts() => changedPartRepository.getAll();

@@ -530,7 +530,13 @@ class _MangaDetailViewState extends ConsumerState<MangaDetailView>
                       tooltip: l10n.mark_below_as_read,
                       icon: const Icon(Symbols.done_rounded),
                       onPressed: () {
-                        int index = chapters.indexOf(chap.first);
+                        // By id: the stream hands out new objects, and an
+                        // identity lookup missed (-1) and marked every chapter.
+                        final index = chapters.indexWhere(
+                          (c) => c.id == chap.first.id,
+                        );
+                        // Nothing below the last chapter (or a stale one).
+                        if (index < 0 || index + 1 >= chapters.length) return;
                         final List<Chapter> updatedChapters = [];
                         final now = DateTime.now().millisecondsSinceEpoch;
                         chapters[index + 1].updateTrackChapterRead(ref);

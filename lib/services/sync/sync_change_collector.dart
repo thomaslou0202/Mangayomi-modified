@@ -36,6 +36,20 @@ const _deviceLocalSettingsKeys = {
   'jrePath',
   'extensionServerPath',
   'updatesLastSeenAt',
+  // Device paths and lists keyed by local manga/chapter ids (see
+  // _preserveDeviceLocalSettings).
+  'downloadLocation',
+  'autoBackupLocation',
+  'externalBrowser',
+  'lastAutoLibraryUpdate',
+  'chapterPageIndexList',
+  'personalReaderModeList',
+  'personalPageModeList',
+  'autoScrollPages',
+  'filterScanlatorList',
+  'chapterNumberDisplayMangaIds',
+  'downloadQueueOrder',
+  'updateErrorsList',
 };
 
 // Per-snapshot memoization avoids a manga lookup for every chapter/history row.

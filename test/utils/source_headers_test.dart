@@ -67,4 +67,13 @@ void main() {
       expect(seen.last, {'x-stored': '1', 'Referer': 'https://site.test/'});
     },
   );
+
+  test('callers adding headers do not change what the next caller gets', () {
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    final provider = headersProvider(source: 'Test', lang: 'zh', sourceId: 7);
+    container.read(provider)['cookie'] = 'session=1';
+    container.invalidate(provider);
+    expect(container.read(provider).containsKey('cookie'), isFalse);
+  });
 }

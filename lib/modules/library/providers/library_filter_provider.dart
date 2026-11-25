@@ -1,4 +1,5 @@
 import 'package:mangayomi/modules/library/providers/library_summary_provider.dart';
+import 'package:mangayomi/services/library_chapter_summary.dart';
 import 'package:mangayomi/models/settings.dart';
 import 'package:mangayomi/models/manga.dart';
 import 'package:mangayomi/repositories/download_repository.dart';
@@ -88,13 +89,12 @@ List<Manga> filteredLibraryManga(
         if (!allNotDownloaded) return false;
       }
 
-      // Filter by unread or started
-      if (unreadFilterType == 1 || startedFilterType == 1) {
-        final hasUnread = summary.unread > 0;
-        if (!hasUnread) return false;
-      } else if (unreadFilterType == 2 || startedFilterType == 2) {
-        final allRead = summary.unread == 0;
-        if (!allRead) return false;
+      if (!passesReadFilters(
+        summary,
+        unreadFilterType: unreadFilterType,
+        startedFilterType: startedFilterType,
+      )) {
+        return false;
       }
 
       // Filter by bookmarked
@@ -202,6 +202,24 @@ List<Manga> filteredLibraryManga(
   return mangas;
 }
 
+/// The unread and started filters (0 off, 1 include, 2 exclude).
+///
+/// "Started" means at least one chapter read. It used to share the unread
+/// test, so it showed titles with unread chapters, started or not.
+bool passesReadFilters(
+  LibraryChapterSummary summary, {
+  required int unreadFilterType,
+  required int startedFilterType,
+}) {
+  final unread = summary.unread > 0;
+  final started = summary.total - summary.unread > 0;
+  if (unreadFilterType == 1 && !unread) return false;
+  if (unreadFilterType == 2 && unread) return false;
+  if (startedFilterType == 1 && !started) return false;
+  if (startedFilterType == 2 && started) return false;
+  return true;
+}
+
 /// The comma-separated terms of a library search, lower-cased once per search
 /// rather than once per title.
 List<String> searchKeywords(String query) => query
@@ -235,7 +253,9 @@ _SearchFields _searchFieldsOf(Manga manga) =>
     _searchFields[manga] ??= _SearchFields(
       name: manga.name?.toLowerCase() ?? '',
       source: manga.source?.toLowerCase() ?? '',
-      genres: [for (final g in manga.genre ?? const <String>[]) g.toLowerCase()],
+      genres: [
+        for (final g in manga.genre ?? const <String>[]) g.toLowerCase(),
+      ],
     );
 
 class _SearchFields {

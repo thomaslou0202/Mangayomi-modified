@@ -89,9 +89,11 @@ Map<String, String> headers(
     );
   }
 
-  if (!entry.mihon) return entry.headers;
-
+  // A copy: callers add cookies and page headers to what they get, and
+  // that must not end up in the cache for every later request.
   final headers = Map<String, String>.of(entry.headers);
+  if (!entry.mihon) return headers;
+
   headers['user-agent'] = ref.watch(userAgentStateProvider);
   return headers;
 }
